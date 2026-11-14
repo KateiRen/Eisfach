@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#126b73">
+  <title>Einrichtung · Eisfach</title>
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="./css/app.css">
+  <script type="module" src="./js/app.js"></script>
+</head>
+<body data-page="setup">
+  <header><a href="./index.html">❄ Eisfach</a></header>
+  <main class="narrow">
+    <h1>Willkommen im Eisfach</h1>
+    <p id="status" role="status"></p>
+    <p id="configuration" class="notice" hidden>Bitte zuerst SUPABASE_URL und SUPABASE_ANON_KEY in js/config.js eintragen.</p>
+    <nav aria-label="Einrichtung">
+      <a href="#create">Neues Inventar</a>
+      <a href="#join">Inventar verbinden</a>
+    </nav>
+    <section id="create" class="card">
+      <h2>1. Inventar einrichten</h2>
+      <form id="create-form">
+        <label>Inventarname<input name="name" required maxlength="100" placeholder="Unser Eisfach"></label>
+        <label>Beschreibung<textarea name="description" maxlength="1000"></textarea></label>
+        <label>Name dieses Geräts<input name="deviceName" required maxlength="100" placeholder="Küchen-Tablet" autocomplete="off"></label>
+        <p>2. Das Inventar wird erstellt. 3. Dieses Gerät wird automatisch registriert.</p>
+        <button>Inventar und erstes Gerät anlegen</button>
+      </form>
+    </section>
+    <section id="join" class="card">
+      <h2>Inventar verbinden</h2>
+      <p>Scanne den QR-Code eines bereits verbundenen Geräts oder gib die Verbindungsdaten ein.</p>
+      <button id="scan-join" type="button" class="secondary">QR-Code scannen</button>
+      <form id="join-form">
+        <label>Inventar-ID<input name="inventoryId" required autocomplete="off"></label>
+        <label>Join-Code<input name="joinToken" required maxlength="32" placeholder="ABCD-EFGH-JKLM" autocomplete="off" autocapitalize="characters"></label>
+        <label>Name dieses Geräts<input name="deviceName" required maxlength="100" placeholder="Mein Smartphone" autocomplete="off"></label>
+        <button>Gerät verbinden</button>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

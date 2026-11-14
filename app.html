@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#126b73">
+  <title>Inventar · Eisfach</title>
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="./css/app.css">
+  <script type="module" src="./js/app.js"></script>
+</head>
+<body data-page="inventory">
+  <header><a href="./app.html">❄ Eisfach</a><nav aria-label="Hauptnavigation"><a href="./devices.html">Geräte</a></nav></header>
+  <main>
+    <h1 id="inventory-name">Dein Inventar</h1>
+    <p id="status" role="status"></p>
+    <div class="toolbar">
+      <label>Suche<input id="search" type="search" placeholder="Name, Notizen, Lagerort …"></label>
+      <label>Kategorie<select id="category"><option value="">Alle Kategorien</option></select></label>
+      <button id="scan-item" class="secondary" type="button">QR scannen</button>
+      <button id="add-item" type="button">Artikel anlegen</button>
+    </div>
+    <p id="empty" hidden>Noch keine passenden Artikel vorhanden.</p>
+    <div id="items" class="grid"></div>
+    <dialog id="item-dialog">
+      <form id="item-form">
+        <h2 id="editor-title">Artikel anlegen</h2>
+        <input name="id" type="hidden">
+        <label>Name<input name="name" required maxlength="200"></label>
+        <label>Beschreibung<textarea name="description" maxlength="2000"></textarea></label>
+        <div class="columns">
+          <label>Menge<input name="quantity" type="number" min="0" max="2147483647" step="1" required value="1"></label>
+          <label>Kategorie<input name="category" maxlength="100" list="categories"></label>
+        </div>
+        <datalist id="categories"></datalist>
+        <label>Lagerort<input name="location" maxlength="200" placeholder="Truhe · Fach 2"></label>
+        <label>Notizen<textarea name="notes" maxlength="4000"></textarea></label>
+        <label>Bilder hinzufügen<input name="images" type="file" accept="image/*" multiple></label>
+        <p>Bilder werden auf maximal 1600 Pixel verkleinert und als WebP gespeichert.</p>
+        <p id="editor-status" role="status"></p>
+        <div class="actions"><button type="submit">Speichern</button><button id="cancel-item" type="button" class="secondary">Schließen</button></div>
+      </form>
+    </dialog>
+    <dialog id="detail-dialog">
+      <h2 id="detail-name"></h2>
+      <div id="detail-images" class="images"></div>
+      <div id="item-qr"></div>
+      <p id="detail-code" class="code"></p>
+      <button id="close-detail" type="button">Schließen</button>
+    </dialog>
+  </main>
+</body>
+</html>
