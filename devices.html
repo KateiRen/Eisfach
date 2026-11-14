@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#126b73">
+  <title>Geräte · Eisfach</title>
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="./css/app.css">
+  <script type="module" src="./js/app.js"></script>
+</head>
+<body data-page="devices">
+  <header><a href="./app.html">❄ Eisfach</a><nav aria-label="Hauptnavigation"><a href="./app.html">Inventar</a></nav></header>
+  <main>
+    <h1>Geräte verwalten</h1>
+    <p id="status" role="status"></p>
+    <div class="actions"><button id="pair-device" type="button">Neues Gerät verbinden</button><button id="disconnect" type="button" class="secondary">Dieses Gerät lokal trennen</button></div>
+    <section id="pairing" class="card" hidden>
+      <h2>Einmaliger Join-Code</h2>
+      <div id="join-qr"></div>
+      <p id="join-code" class="code"></p>
+      <p id="join-expiry"></p>
+      <p>Nur mit vertrauenswürdigen Personen teilen. Der Code erlaubt die Registrierung eines voll berechtigten Geräts.</p>
+      <button id="hide-pairing" class="secondary" type="button">Code ausblenden</button>
+    </section>
+    <div id="devices" class="grid"></div>
+  </main>
+</body>
+</html>

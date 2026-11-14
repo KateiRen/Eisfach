@@ -1,0 +1,16 @@
+project_id = "eisfach"
+
+[functions.createInventory]
+verify_jwt = false
+
+[functions.createJoinToken]
+verify_jwt = false
+
+[functions.registerDevice]
+verify_jwt = false
+
+[functions.revokeDevice]
+verify_jwt = false
+
+[functions.imageStorage]
+verify_jwt = false
