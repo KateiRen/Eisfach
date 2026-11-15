@@ -31,6 +31,14 @@ textarea { min-height: 80px; resize: vertical; }
 .card { background: white; border: 1px solid #cfe0e1; border-radius: 1rem; padding: 1.2rem; margin-block: 1rem; box-shadow: 0 2px 6px #17343a08; overflow-wrap: anywhere; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 1rem; }
 .grid .card { margin: 0; }
+.catalog-category { grid-column: 1 / -1; min-width: 0; }
+.catalog-category .card h3 { font-size: 1.25rem; overflow-wrap: anywhere; }
+.catalog-card { padding: .85rem; }
+.catalog-card h3 { margin: 0 0 .4rem; }
+.catalog-card p { margin: 0 0 .65rem; }
+.compact-actions { gap: .4rem; }
+.compact-actions button { padding: .4rem .65rem; font-size: .875rem; }
+#item-form > .actions + .actions { margin-top: .75rem; }
 .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .muted { color: #49666c; }
 .quantity { font-weight: 700; font-size: 1.3rem; padding: 0 .5rem; }

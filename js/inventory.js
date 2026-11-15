@@ -13,6 +13,8 @@ let offline = false;
 let currentView = 'stock';
 let detailVersion = 0;
 let editingVersion = null;
+let editingItem = null;
+let editorBusy = false;
 let stockEditingVersion = null;
 const form = () => document.querySelector('#item-form');
 const dialog = () => document.querySelector('#item-dialog');
@@ -21,6 +23,34 @@ const stockDialog = () => document.querySelector('#stock-dialog');
 
 export function hasStock(entry) {
   return Number(entry.quantity) > 0 || Number(entry.weight_grams) > 0;
+}
+
+export function groupCatalog(products) {
+  const groups = new Map();
+  for (const product of products) {
+    const category = product.category || '';
+    if (!groups.has(category)) groups.set(category, []);
+    groups.get(category).push(product);
+  }
+  return [...groups].sort(([a], [b]) =>
+    a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, 'de'))
+    .map(([category, entries]) => ({
+      category,
+      items: entries.sort((a, b) => a.name.localeCompare(b.name, 'de')),
+    }));
+}
+
+export function productPackInfo(notes = '') {
+  const field = (name) => notes.match(new RegExp(`^${name}:[ \\t]*([^\\r\\n]*)`, 'mi'))?.[1].trim() || '—';
+  return { parts: field('Teile'), weight: field('Gewicht') };
+}
+
+export function productStockLabel(itemId, entries) {
+  const active = entries.filter((entry) => entry.item_id === itemId && hasStock(entry));
+  if (!active.length) return 'Kein Bestand';
+  const quantity = active.reduce((sum, entry) => sum + Number(entry.quantity), 0);
+  const positions = `${active.length} Position${active.length === 1 ? '' : 'en'}`;
+  return `Bestand: ${quantity > 0 ? `${quantity} Stück · ` : ''}${positions}`;
 }
 
 export function optionalInteger(value) {
@@ -96,33 +126,55 @@ function render() {
   document.querySelector('#empty').hidden = visible.length > 0;
   document.querySelector('#empty').textContent = currentView === 'catalog'
     ? 'Keine passenden Produkte vorhanden.' : 'Keine passenden Bestandspositionen vorhanden.';
-  document.querySelector('#items').replaceChildren(...visible.map((record) => {
+  const renderCard = (record) => {
     const entry = currentView === 'stock' ? record : null;
     const item = entry ? itemById.get(entry.item_id) : record;
     const card = element('article', undefined, 'card');
+    if (!entry) {
+      card.classList.add('catalog-card');
+      const pack = productPackInfo(item.notes);
+      card.append(element('h3', item.name),
+        element('p', `Teile: ${pack.parts} · Gewicht: ${pack.weight}`, 'muted'),
+        element('p', productStockLabel(item.id, stockEntries)));
+      const buttons = element('div', undefined, 'actions compact-actions');
+      const edit = action('Bearbeiten', () => editItem(item));
+      const add = action('Einlagern', () => editStock(null, item.id));
+      edit.disabled = add.disabled = offline;
+      buttons.append(edit, add);
+      card.append(buttons);
+      return card;
+    }
     card.append(element('h2', item.name), element('p', item.description || ''),
-      element('p', [item.category, entry ? label(entry) : ''].filter(Boolean).join(' · '), 'muted'));
+      element('p', [item.category, label(entry)].filter(Boolean).join(' · '), 'muted'));
     if (item.notes) card.append(element('p', item.notes));
     const times = [
       item.preparation_minutes != null ? `Zubereitung: ${item.preparation_minutes} Min.` : '',
       item.thawing_minutes != null ? `Auftauen: ${item.thawing_minutes} Min.` : '',
     ].filter(Boolean);
     if (times.length) card.append(element('p', times.join(' · ')));
-    if (entry) {
-      card.append(element('p', `Stückzahl: ${entry.quantity}${entry.weight_grams != null ? ` · Gesamtgewicht: ${entry.weight_grams} g` : ''}`));
-    } else {
-      const count = stockEntries.filter((stock) => stock.item_id === item.id && hasStock(stock)).length;
-      card.append(element('p', count ? `${count} Bestandsposition${count === 1 ? '' : 'en'}` : 'Kein Bestand', 'muted'));
-    }
+    card.append(element('p', `Stückzahl: ${entry.quantity}${entry.weight_grams != null ? ` · Gesamtgewicht: ${entry.weight_grams} g` : ''}`));
     const buttons = element('div', undefined, 'actions');
-    const edit = action(entry ? 'Position bearbeiten' : 'Produkt bearbeiten', () => entry ? editStock(entry) : editItem(item));
-    const remove = action(entry ? 'Position entfernen' : 'Produkt löschen', () => entry ? deleteStock(entry) : deleteItem(item), 'danger');
+    const edit = action('Position bearbeiten', () => editStock(entry));
+    const remove = action('Position entfernen', () => deleteStock(entry), 'danger');
     const add = action('Einlagern', () => editStock(null, item.id));
     edit.disabled = remove.disabled = add.disabled = offline;
     buttons.append(edit, add, action('Bilder & QR', () => showDetails(item)), remove);
     card.append(document.createElement('hr'), buttons);
     return card;
-  }));
+  };
+  const content = currentView === 'catalog'
+    ? groupCatalog(visible).map((group, index) => {
+      const section = element('section', undefined, 'catalog-category');
+      const heading = element('h2', group.category || 'Ohne Kategorie');
+      heading.id = `catalog-category-${index}`;
+      section.setAttribute('aria-labelledby', heading.id);
+      const cards = element('div', undefined, 'grid');
+      cards.append(...group.items.map(renderCard));
+      section.append(heading, cards);
+      return section;
+    })
+    : visible.map(renderCard);
+  document.querySelector('#items').replaceChildren(...content);
 }
 
 function setView(view) {
@@ -136,6 +188,7 @@ function setView(view) {
 }
 
 function editItem(item) {
+  editingItem = item || null;
   editingVersion = item?.updated_at || null;
   form().reset();
   for (const key of ['id', 'name', 'description', 'category', 'notes', 'preparation_minutes', 'thawing_minutes']) {
@@ -143,14 +196,39 @@ function editItem(item) {
   }
   document.querySelector('#editor-title').textContent = item ? 'Produkt bearbeiten' : 'Produkt anlegen';
   document.querySelector('#editor-status').textContent = '';
+  updateEditorActions();
   dialog().showModal();
+}
+
+function updateEditorActions() {
+  form().querySelector('[type=submit]').disabled = editorBusy || offline;
+  document.querySelector('#cancel-item').disabled = editorBusy;
+  const images = document.querySelector('#item-images');
+  const remove = document.querySelector('#delete-item');
+  images.hidden = remove.hidden = !editingItem;
+  images.disabled = editorBusy;
+  remove.disabled = editorBusy || offline;
+}
+
+async function editorAction(handler) {
+  editorBusy = true;
+  updateEditorActions();
+  document.querySelector('#editor-status').textContent = '';
+  try {
+    await handler();
+  } catch (error) {
+    if (dialog().open) document.querySelector('#editor-status').textContent = error.message;
+    else status(error.message);
+  } finally {
+    editorBusy = false;
+    updateEditorActions();
+  }
 }
 
 async function saveItem(event) {
   event.preventDefault();
-  const button = form().querySelector('[type=submit]');
-  button.disabled = true;
-  document.querySelector('#cancel-item').disabled = true;
+  editorBusy = true;
+  updateEditorActions();
   const feedback = document.querySelector('#editor-status');
   feedback.textContent = 'Wird gespeichert …';
   try {
@@ -179,6 +257,7 @@ async function saveItem(event) {
     // Nach erfolgreichem Artikel-Insert bei einem Bildfehler keinen zweiten Artikel erzeugen.
     form().elements.id.value = id;
     editingVersion = saved[0].updated_at;
+    editingItem = saved[0];
     const files = [...form().elements.images.files];
     for (let index = 0; index < files.length; index++) {
       await uploadImage(id, files[index], index);
@@ -189,17 +268,19 @@ async function saveItem(event) {
   } catch (error) {
     feedback.textContent = `${error.message} Bereits gespeicherte Artikeldaten bleiben erhalten; bei teilweisem Bildupload bitte schließen und Bilder prüfen.`;
   } finally {
-    button.disabled = false;
-    document.querySelector('#cancel-item').disabled = false;
+    editorBusy = false;
+    updateEditorActions();
   }
 }
 
 async function deleteItem(item) {
+  if (offline) throw new Error('Offline sind keine Änderungen möglich.');
   if (!confirm(`Produkt „${item.name}“ unwiderruflich löschen? Alle zugehörigen Bestandspositionen und Bilder werden ebenfalls gelöscht.`)) return;
   const images = await list('item_images', `?item_id=eq.${item.id}&select=*&order=id.asc`);
   // Objekte vor dem Artikel löschen, solange die Storage-Policy dessen Existenz prüfen kann.
   for (const image of images) await removeImage(image);
   await rest('items', `?id=eq.${item.id}`, { method: 'DELETE' });
+  dialog().close();
   await refresh();
 }
 
@@ -309,6 +390,7 @@ export async function initInventory() {
     document.querySelector('#add-item').disabled = true;
     document.querySelector('#add-stock').disabled = true;
     document.querySelectorAll('#detail-images button').forEach((button) => { button.disabled = true; });
+    updateEditorActions();
     render();
   });
   const syncView = () => setView(location.hash === '#catalog' ? 'catalog' : 'stock');
@@ -319,9 +401,13 @@ export async function initInventory() {
   document.querySelector('#add-item').addEventListener('click', () => editItem());
   document.querySelector('#add-stock').addEventListener('click', () => editStock());
   document.querySelector('#cancel-item').addEventListener('click', () => dialog().close());
+  document.querySelector('#item-images').addEventListener('click', () =>
+    editorAction(() => showDetails(editingItem)));
+  document.querySelector('#delete-item').addEventListener('click', () =>
+    editorAction(() => deleteItem(editingItem)));
   document.querySelector('#cancel-stock').addEventListener('click', () => stockDialog().close());
   dialog().addEventListener('cancel', (event) => {
-    if (form().querySelector('[type=submit]').disabled) event.preventDefault();
+    if (editorBusy) event.preventDefault();
   });
   stockDialog().addEventListener('cancel', (event) => {
     if (stockForm().querySelector('[type=submit]').disabled) event.preventDefault();

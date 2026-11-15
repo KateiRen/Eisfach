@@ -236,7 +236,18 @@ Die SQL- und Edge-Quelldateien dürfen öffentlich sein, enthalten aber keine Se
 1. Ohne gespeicherte Verbindung öffnet die App `setup.html`. Inventarnamen und
    Gerätenamen eingeben. Das erste Gerät wird zusammen mit dem Inventar angelegt.
 2. Im **Produktkatalog** Produkte mit Kategorie, Zubereitungszeit und optionaler
-   Auftauzeit anlegen. Über **Einlagern** Bestandspositionen mit Lagerort, Stückzahl
+   Auftauzeit anlegen. Der Katalog ist nach Kategorien gruppiert; Kategorien und
+   Produkte innerhalb jeder Kategorie sind alphabetisch sortiert. Produkte ohne
+   Kategorie erscheinen am Ende unter **Ohne Kategorie**. Suche und Kategoriefilter
+   schränken die Gruppen auf passende Produkte ein.
+   Katalogkarten zeigen Name, Teile, Packungsgewicht und den aktuellen Bestand
+   (summierte Stückzahl und Anzahl belegter Positionen) sowie kompakte Buttons
+   **Bearbeiten** und **Einlagern**. Teile und Gewicht stammen aus den Notizzeilen
+   `Teile:` und `Gewicht:`; fehlende Werte erscheinen als „—“. Es wird weder eine
+   Einheit noch ein Gewicht aus dem aktuellen Bestand abgeleitet.
+   **Produkt löschen** und **Bilder & QR** sind bei gespeicherten Produkten im
+   Bearbeitungsdialog erreichbar.
+   Über **Einlagern** Bestandspositionen mit Lagerort, Stückzahl
    und optionalem Gesamtgewicht hinzufügen. Dasselbe Produkt kann gleichzeitig
    in mehreren Kühltruhen liegen. Die Ansicht **Bestand** zeigt nur eingelagerte
    Positionen. Beim Entfernen einer Position bleibt das Produkt erhalten;
