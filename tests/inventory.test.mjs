@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 globalThis.document = { querySelector: () => null };
-const { hasStock, optionalInteger, stockValues, groupCatalog, productPackInfo, productStockLabel } = await import('../js/inventory.js');
+const { hasStock, optionalInteger, stockValues, groupCatalog, productPackInfo, productStockLabel, loadProductImages } = await import('../js/inventory.js');
 const { saveConnection, clearConnection, saveSnapshot, loadSnapshot } = await import('../js/auth.js');
 const { locationSelection, locationLabel } = await import('../js/locations.js');
 
@@ -67,6 +67,48 @@ test('Katalogbestand summiert Stückzahlen über Orte und berücksichtigt reinen
   assert.equal(productStockLabel('fruit', entries), 'Bestand: 1 Position');
   assert.equal(productStockLabel('empty', entries), 'Kein Bestand');
   assert.equal(productStockLabel('fish', [{ item_id: 'fish', quantity: 0, weight_grams: 0 }]), 'Kein Bestand');
+});
+
+test('Produktbilder werden signiert angezeigt; veraltete Dialog-Ladevorgänge ändern keine Bilder', async (t) => {
+  saveConnection({ inventoryId: '11111111-1111-4111-8111-111111111111', deviceId: 'test', deviceToken: 'test' });
+  const previousDocument = globalThis.document;
+  const node = (tag) => ({
+    tag, children: [],
+    append(...children) { this.children.push(...children); },
+    replaceChildren(...children) { this.children = children; },
+    addEventListener() {},
+  });
+  globalThis.document = { querySelector: () => null, createElement: node };
+  t.after(() => { globalThis.document = previousDocument; clearConnection(); });
+  let current = true;
+  let invalidateOnSign = false;
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    let response;
+    if (url.includes('/functions/v1/imageStorage')) {
+      if (invalidateOnSign) current = false;
+      response = { signedURL: 'https://example.invalid/signed-product.webp' };
+    } else {
+      response = new URL(url).searchParams.get('offset') === '0'
+        ? [{ id: 'image', path: 'test/product.webp', caption: 'Packung' }] : [];
+    }
+    return new Response(JSON.stringify(response), { status: 200 });
+  });
+  const gallery = node('div');
+  gallery.id = 'editor-images';
+  await loadProductImages({ id: 'product', name: 'Fisch' }, gallery, () => current);
+  assert.equal(gallery.children.length, 1);
+  const [image, caption, remove] = gallery.children[0].children;
+  assert.equal(image.src, 'https://example.invalid/signed-product.webp');
+  assert.equal(image.alt, 'Packung');
+  assert.equal(caption.textContent, 'Packung');
+  assert.equal(remove.textContent, 'Bild löschen');
+  current = false;
+  await loadProductImages({ id: 'old-product' }, gallery, () => current);
+  assert.equal(gallery.children.length, 1);
+  current = true;
+  invalidateOnSign = true;
+  await loadProductImages({ id: 'product' }, gallery, () => current);
+  assert.equal(gallery.children.length, 0);
 });
 
 test('Stückzahl, Gesamtgewicht und Zeiten beachten Grenzen und optionale Werte', () => {

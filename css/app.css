@@ -38,7 +38,6 @@ textarea { min-height: 80px; resize: vertical; }
 .catalog-card p { margin: 0 0 .65rem; }
 .compact-actions { gap: .4rem; }
 .compact-actions button { padding: .4rem .65rem; font-size: .875rem; }
-#item-form > .actions + .actions { margin-top: .75rem; }
 .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .muted { color: #49666c; }
 .quantity { font-weight: 700; font-size: 1.3rem; padding: 0 .5rem; }

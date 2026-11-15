@@ -1,7 +1,7 @@
 import { rest, list } from './supabase.js';
 import { loadConnection, saveSnapshot, loadSnapshot } from './auth.js';
 import { uploadImage, imageURL, removeImage } from './storage.js';
-import { renderQR, scanQR } from './scanner.js';
+import { renderQR } from './scanner.js';
 import { element, action, status } from './app.js';
 import { locationLabel, populateCompartments, locationSelection } from './locations.js';
 
@@ -15,6 +15,7 @@ let detailVersion = 0;
 let editingVersion = null;
 let editingItem = null;
 let editorBusy = false;
+let editorImageVersion = 0;
 let stockEditingVersion = null;
 const form = () => document.querySelector('#item-form');
 const dialog = () => document.querySelector('#item-dialog');
@@ -187,7 +188,8 @@ function setView(view) {
   render();
 }
 
-function editItem(item) {
+async function editItem(item) {
+  const version = ++editorImageVersion;
   editingItem = item || null;
   editingVersion = item?.updated_at || null;
   form().reset();
@@ -197,17 +199,27 @@ function editItem(item) {
   document.querySelector('#editor-title').textContent = item ? 'Produkt bearbeiten' : 'Produkt anlegen';
   document.querySelector('#editor-status').textContent = '';
   updateEditorActions();
+  const gallery = document.querySelector('#editor-images');
+  gallery.replaceChildren();
   dialog().showModal();
+  if (!item) return;
+  const isCurrent = () => version === editorImageVersion && dialog().open;
+  try {
+    await loadProductImages(item, gallery, isCurrent, editorAction);
+  } catch (error) {
+    if (isCurrent()) gallery.replaceChildren(element('p', `Bilder konnten nicht geladen werden: ${error.message}`));
+  }
 }
 
 function updateEditorActions() {
   form().querySelector('[type=submit]').disabled = editorBusy || offline;
   document.querySelector('#cancel-item').disabled = editorBusy;
-  const images = document.querySelector('#item-images');
   const remove = document.querySelector('#delete-item');
-  images.hidden = remove.hidden = !editingItem;
-  images.disabled = editorBusy;
+  remove.hidden = !editingItem;
   remove.disabled = editorBusy || offline;
+  document.querySelectorAll('#editor-images button').forEach((button) => {
+    button.disabled = editorBusy || offline;
+  });
 }
 
 async function editorAction(handler) {
@@ -358,26 +370,33 @@ async function showDetails(item) {
   } catch {
     status('QR-Erzeugung ist noch nicht offline verfügbar. Der Artikelcode wird als Text angezeigt.');
   }
+  await loadProductImages(item, gallery, () => version === detailVersion && detail.open);
+}
+
+export async function loadProductImages(item, gallery, isCurrent, runAction = (handler) => handler()) {
+  if (!isCurrent()) return;
+  gallery.replaceChildren();
   if (offline) {
     gallery.append(element('p', 'Private Bilder sind nur online verfügbar.'));
     return;
   }
   const images = await list('item_images', `?item_id=eq.${item.id}&select=*&order=sort_order.asc,created_at.asc,id.asc`);
+  if (!isCurrent()) return;
   for (const image of images) {
     const url = await imageURL(image.path);
-    if (version !== detailVersion || !detail.open) return;
+    if (!isCurrent()) return;
     const figure = element('figure');
     const img = element('img');
     img.src = url;
     img.alt = image.caption || item.name;
     img.loading = 'lazy';
-    const remove = action('Bild löschen', async () => {
+    const remove = action('Bild löschen', () => runAction(async () => {
       if (offline) throw new Error('Offline sind keine Änderungen möglich.');
       if (!confirm('Dieses Bild löschen?')) return;
       await removeImage(image);
       figure.remove();
-    }, 'danger');
-    remove.disabled = offline;
+    }), 'danger');
+    remove.disabled = offline || (gallery.id === 'editor-images' && editorBusy);
     figure.append(img, element('figcaption', image.caption || ''), remove);
     gallery.append(figure);
   }
@@ -401,13 +420,15 @@ export async function initInventory() {
   document.querySelector('#add-item').addEventListener('click', () => editItem());
   document.querySelector('#add-stock').addEventListener('click', () => editStock());
   document.querySelector('#cancel-item').addEventListener('click', () => dialog().close());
-  document.querySelector('#item-images').addEventListener('click', () =>
-    editorAction(() => showDetails(editingItem)));
   document.querySelector('#delete-item').addEventListener('click', () =>
     editorAction(() => deleteItem(editingItem)));
   document.querySelector('#cancel-stock').addEventListener('click', () => stockDialog().close());
   dialog().addEventListener('cancel', (event) => {
     if (editorBusy) event.preventDefault();
+  });
+  dialog().addEventListener('close', () => {
+    editorImageVersion++;
+    document.querySelector('#editor-images').replaceChildren();
   });
   stockDialog().addEventListener('cancel', (event) => {
     if (stockForm().querySelector('[type=submit]').disabled) event.preventDefault();
@@ -422,15 +443,6 @@ export async function initInventory() {
   stockForm().elements.location_id.addEventListener('change', () => {
     populateCompartments(stockForm().elements.compartment_id, compartments,
       stockForm().elements.location_id.value);
-  });
-  document.querySelector('#scan-item').addEventListener('click', async () => {
-    try {
-      const code = await scanQR();
-      if (!code) return;
-      const item = items.find((entry) => entry.qr_code === code);
-      if (item) await showDetails(item);
-      else status('Dieser Artikel gehört nicht zur geladenen Inventarliste.');
-    } catch (error) { status(error.message); }
   });
   await refresh();
   if (!offline) {

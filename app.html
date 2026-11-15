@@ -19,7 +19,6 @@
     <div class="toolbar">
       <label>Suche<input id="search" type="search" placeholder="Name, Notizen, Lagerort …"></label>
       <label>Kategorie<select id="category"><option value="">Alle Kategorien</option></select></label>
-      <button id="scan-item" class="secondary" type="button">QR scannen</button>
       <button id="add-stock" type="button">Bestand hinzufügen</button>
       <button id="add-item" type="button">Produkt anlegen</button>
     </div>
@@ -38,14 +37,15 @@
           <label>Auftauzeit (Minuten, optional)<input name="thawing_minutes" type="number" min="0" max="2147483647" step="1"></label>
         </div>
         <label>Notizen<textarea name="notes" maxlength="4000"></textarea></label>
+        <div id="editor-images" class="images" aria-label="Vorhandene Produktbilder"></div>
         <label>Bilder hinzufügen<input name="images" type="file" accept="image/*" multiple></label>
         <p>Bilder werden auf maximal 1600 Pixel verkleinert und als WebP gespeichert.</p>
         <p id="editor-status" role="status"></p>
         <div class="actions">
-          <button id="item-images" type="button" class="secondary" hidden>Bilder &amp; QR</button>
           <button id="delete-item" type="button" class="danger" hidden>Produkt löschen</button>
+          <button type="submit">Speichern</button>
+          <button id="cancel-item" type="button" class="secondary">Schließen</button>
         </div>
-        <div class="actions"><button type="submit">Speichern</button><button id="cancel-item" type="button" class="secondary">Schließen</button></div>
       </form>
     </dialog>
     <dialog id="stock-dialog">
