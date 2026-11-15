@@ -1,4 +1,4 @@
-const CACHE = 'eisfach-shell-v11';
+const CACHE = 'eisfach-shell-v12';
 const SHELL = [
   './', './index.html', './setup.html', './app.html', './devices.html', './freezer.html', './appearance.html',
   './css/app.css', './js/config.js', './js/supabase.js', './js/auth.js',

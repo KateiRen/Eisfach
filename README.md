@@ -322,6 +322,11 @@ und Fachnamen sind nach erfolgreichem Laden weiterhin offline lesbar.
 Bestand und Produktliste sind direkt über
 `app.html#stock` bzw. `app.html#catalog` erreichbar; die Browsernavigation
 wechselt ebenfalls zwischen diesen Ansichten.
+In beiden Ansichten lassen sich Kategorien über eine Button-Leiste einzeln
+aktivieren und deaktivieren. Mehrere aktive Kategorien werden gemeinsam angezeigt.
+Ohne aktive Kategorie oder mit **Alle Kategorien** werden alle Kategorien
+angezeigt. Die Auswahl bleibt beim Wechsel zwischen Bestand und Produktliste
+erhalten und lässt sich mit der Suche kombinieren; sie wird nicht dauerhaft gespeichert.
 In der Produktliste blendet der Filter **Nur mit Bestand** Produkte ohne positive
 Stückzahl und ohne positives Gesamtgewicht aus. Er lässt sich mit Suche und
 Kategorie kombinieren und funktioniert auch mit der Offline-Kopie. In der

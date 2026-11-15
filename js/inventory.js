@@ -10,6 +10,7 @@ let locations = [];
 let compartments = [];
 let offline = false;
 let currentView = 'stock';
+const selectedCategories = new Set();
 let renderVersion = 0;
 let previewPaths = null;
 const previewURLs = new Map();
@@ -27,6 +28,13 @@ const stockDialog = () => document.querySelector('#stock-dialog');
 
 export function hasStock(entry) {
   return Number(entry.quantity) > 0 || Number(entry.weight_grams) > 0;
+}
+
+export function matchesProduct(item, search, categories, locationNames = []) {
+  const query = search.toLocaleLowerCase('de');
+  return (!categories.size || categories.has(item.category)) &&
+    [item.name, item.description, item.category, item.notes, item.qr_code, ...locationNames]
+      .some((value) => String(value || '').toLocaleLowerCase('de').includes(query));
 }
 
 export function groupCatalog(products, getProduct = (product) => product) {
@@ -104,11 +112,8 @@ async function refresh() {
     offline = true;
     status(`Server nicht erreichbar: ${error.message} Offline-Kopie vom ${new Date(snapshot.savedAt).toLocaleString('de-DE')}. Nur Lesen möglich.`);
   }
-  const selected = document.querySelector('#category').value;
   const categories = [...new Set(items.map((item) => item.category).filter(Boolean))].sort();
-  document.querySelector('#category').replaceChildren(new Option('Alle Kategorien', ''),
-    ...categories.map((category) => new Option(category, category)));
-  document.querySelector('#category').value = categories.includes(selected) ? selected : '';
+  renderCategoryFilters(categories);
   document.querySelector('#categories').replaceChildren(...categories.map((category) => new Option(category)));
   document.querySelector('#add-item').disabled = offline;
   document.querySelector('#add-stock').disabled = offline || !items.length;
@@ -117,22 +122,43 @@ async function refresh() {
   render();
 }
 
+function renderCategoryFilters(categories) {
+  for (const category of selectedCategories) {
+    if (!categories.includes(category)) selectedCategories.delete(category);
+  }
+  const buttons = ['', ...categories].map((category) => {
+    const button = element('button', category || 'Alle Kategorien');
+    button.type = 'button';
+    button.dataset.category = category;
+    button.setAttribute('aria-controls', 'items');
+    button.addEventListener('click', () => {
+      if (!category) selectedCategories.clear();
+      else if (selectedCategories.has(category)) selectedCategories.delete(category);
+      else selectedCategories.add(category);
+      render();
+    });
+    return button;
+  });
+  document.querySelector('#category-filters').replaceChildren(...buttons);
+}
+
 function render() {
   const version = ++renderVersion;
-  const search = document.querySelector('#search').value.toLocaleLowerCase('de');
-  const category = document.querySelector('#category').value;
+  const search = document.querySelector('#search').value;
   const onlyWithStock = document.querySelector('#only-with-stock').checked;
-  const matches = (item, locations) => (!category || item.category === category) &&
-    [item.name, item.description, item.category, item.notes, item.qr_code, ...locations]
-      .some((value) => String(value || '').toLocaleLowerCase('de').includes(search));
+  for (const button of document.querySelectorAll('#category-filters button')) {
+    button.setAttribute('aria-pressed', String(button.dataset.category
+      ? selectedCategories.has(button.dataset.category) : !selectedCategories.size));
+  }
   const itemById = new Map(items.map((item) => [item.id, item]));
   const label = (entry) => locationLabel(entry, locations, compartments);
   const visible = currentView === 'catalog'
     ? items.filter((item) =>
         (!onlyWithStock || stockEntries.some((entry) => entry.item_id === item.id && hasStock(entry))) &&
-        matches(item, stockEntries.filter((entry) => entry.item_id === item.id).map(label)))
+        matchesProduct(item, search, selectedCategories,
+          stockEntries.filter((entry) => entry.item_id === item.id).map(label)))
     : stockEntries.filter((entry) => hasStock(entry) && itemById.has(entry.item_id) &&
-        matches(itemById.get(entry.item_id), [label(entry)]));
+        matchesProduct(itemById.get(entry.item_id), search, selectedCategories, [label(entry)]));
   document.querySelector('#empty').hidden = visible.length > 0;
   document.querySelector('#empty').textContent = currentView === 'catalog'
     ? 'Keine passenden Produkte vorhanden.' : 'Keine passenden Bestandspositionen vorhanden.';
@@ -483,7 +509,6 @@ export async function initInventory() {
   window.addEventListener('hashchange', syncView);
   syncView();
   document.querySelector('#search').addEventListener('input', render);
-  document.querySelector('#category').addEventListener('change', render);
   document.querySelector('#only-with-stock').addEventListener('change', render);
   document.querySelector('#add-item').addEventListener('click', () => editItem());
   document.querySelector('#add-stock').addEventListener('click', () => editStock());

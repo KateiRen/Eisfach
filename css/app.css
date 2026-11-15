@@ -36,6 +36,9 @@ input[type="color"] { width: 100%; max-width: 12rem; height: 3rem; padding: .25r
 .toolbar { align-items: end; margin-bottom: 1rem; }
 .toolbar label { flex: 1 1 180px; margin: 0; }
 .toolbar .checkbox-label { flex: 0 0 auto; align-self: center; }
+.category-filters { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+.category-filters button { max-width: 100%; padding: .5rem .85rem; overflow-wrap: anywhere; background: white; color: var(--accent-link); border-color: var(--accent-link); }
+.category-filters button[aria-pressed="true"] { background: var(--accent); color: var(--accent-foreground); }
 .card { background: white; border: 1px solid #cfe0e1; border-radius: 1rem; padding: 1.2rem; margin-block: 1rem; box-shadow: 0 2px 6px #17343a08; overflow-wrap: anywhere; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 1rem; }
 .grid .card { margin: 0; }

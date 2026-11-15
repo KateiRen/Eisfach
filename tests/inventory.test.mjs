@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 globalThis.document = { querySelector: () => null };
 const {
-  hasStock, optionalInteger, stockValues, groupCatalog, productPackInfo,
+  hasStock, matchesProduct, optionalInteger, stockValues, groupCatalog, productPackInfo,
   productStockLabel, loadProductImages, loadStockPreview,
 } = await import('../js/inventory.js');
 const { saveConnection, clearConnection, saveSnapshot, loadSnapshot } = await import('../js/auth.js');
@@ -21,6 +21,29 @@ test('Bestand umfasst Stückzahl oder Gewicht, aber keine leeren Positionen', ()
   assert.equal(hasStock({ quantity: 0, weight_grams: '0.000' }), false);
   assert.equal(hasStock({ quantity: 1, weight_grams: null }), true);
   assert.equal(hasStock({ quantity: 0, weight_grams: '0.001' }), true);
+});
+
+test('Kategorie-Mehrfachauswahl zeigt gemeinsam gewählte Kategorien und ohne Auswahl alle Produkte', () => {
+  const products = [
+    { name: 'Lachs', category: 'Fisch' },
+    { name: 'Erbsen', category: 'Gemüse' },
+    { name: 'Waffeln', category: 'Dessert' },
+    { name: 'Brot', category: '' },
+  ];
+  const names = (categories) => products
+    .filter((item) => matchesProduct(item, '', new Set(categories))).map((item) => item.name);
+  assert.deepEqual(names(['Fisch', 'Gemüse']), ['Lachs', 'Erbsen']);
+  assert.deepEqual(names(['Gemüse']), ['Erbsen']);
+  assert.deepEqual(names([]), ['Lachs', 'Erbsen', 'Waffeln', 'Brot']);
+});
+
+test('Kategorie-Buttons bleiben mit Suche nach Produkt und Lagerort kombinierbar', () => {
+  const product = { name: 'Lachs', category: 'Fisch', notes: 'Für Gäste' };
+  assert.equal(matchesProduct(product, 'LACHS', new Set(['Fisch', 'Gemüse'])), true);
+  assert.equal(matchesProduct(product, 'GÄSTE', new Set(['Fisch'])), true);
+  assert.equal(matchesProduct(product, 'KELLER', new Set(['Fisch']), ['Keller · Fach 1']), true);
+  assert.equal(matchesProduct(product, 'Keller', new Set(['Gemüse']), ['Keller']), false);
+  assert.equal(matchesProduct(product, 'Erbsen', new Set(['Fisch'])), false);
 });
 
 test('Katalog gruppiert Kategorien und sortiert Produkte darin deutsch alphabetisch', () => {
