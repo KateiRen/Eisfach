@@ -10,7 +10,7 @@ let locations = [];
 let compartments = [];
 let offline = false;
 let currentView = 'stock';
-const selectedCategories = new Set();
+let selectedCategory = '';
 let renderVersion = 0;
 let previewPaths = null;
 const previewURLs = new Map();
@@ -27,13 +27,13 @@ const stockForm = () => document.querySelector('#stock-form');
 const stockDialog = () => document.querySelector('#stock-dialog');
 
 export function hasStock(entry) {
-  return Number(entry.quantity) > 0 || Number(entry.weight_grams) > 0;
+  return Number(entry.quantity) > 0;
 }
 
-export function matchesProduct(item, search, categories, locationNames = []) {
+export function matchesProduct(item, search, category, locationNames = []) {
   const query = search.toLocaleLowerCase('de');
-  return (!categories.size || categories.has(item.category)) &&
-    [item.name, item.description, item.category, item.notes, item.qr_code, ...locationNames]
+  return (!category || item.category === category) &&
+    [item.name, item.product_number, item.description, item.category, item.notes, item.qr_code, ...locationNames]
       .some((value) => String(value || '').toLocaleLowerCase('de').includes(query));
 }
 
@@ -52,9 +52,19 @@ export function groupCatalog(products, getProduct = (product) => product) {
     }));
 }
 
-export function productPackInfo(notes = '') {
-  const field = (name) => notes.match(new RegExp(`^${name}:[ \\t]*([^\\r\\n]*)`, 'mi'))?.[1].trim() || '—';
-  return { parts: field('Teile'), weight: field('Gewicht') };
+export function productWeightLabel(item) {
+  return item?.weight_grams == null ? '—'
+    : `${Number(item.weight_grams).toLocaleString('de-DE', { maximumFractionDigits: 3 })} g`;
+}
+
+export function productPackInfo(item = {}) {
+  const parts = (item.notes || '').match(/^Teile:[ \t]*([^\r\n]*)/mi)?.[1].trim() || '—';
+  return { parts, weight: productWeightLabel(item) };
+}
+
+export function filterByProductNumber(products, query) {
+  const number = query.trim().toLocaleLowerCase('de');
+  return products.filter((item) => (item.product_number || '').toLocaleLowerCase('de').includes(number));
 }
 
 export function productStockLabel(itemId, entries) {
@@ -76,18 +86,26 @@ export function optionalInteger(value) {
 
 export function stockValues(fields) {
   const quantity = Number(fields.quantity);
-  const weight = fields.weight_grams === '' ? null : Number(fields.weight_grams);
   if (fields.quantity === '' || !Number.isInteger(quantity) || quantity < 0 || quantity > 2147483647) {
     throw new Error('Bitte eine gültige nichtnegative ganze Stückzahl eingeben.');
   }
-  if (weight !== null && (!/^\d+(?:\.\d{1,3})?$/.test(fields.weight_grams) ||
-      !Number.isFinite(weight) || weight < 0 || weight > 999999999.999)) {
-    throw new Error('Bitte ein gültiges Gesamtgewicht mit höchstens drei Nachkommastellen eingeben.');
+  return { quantity };
+}
+
+export function optionalWeight(value) {
+  if (value === '') return null;
+  const weight = Number(value);
+  if (!/^\d+(?:\.\d{1,3})?$/.test(value) ||
+      !Number.isFinite(weight) || weight < 0 || weight > 999999999.999) {
+    throw new Error('Bitte ein gültiges Packungsgewicht mit höchstens drei Nachkommastellen eingeben.');
   }
-  return { quantity, weight_grams: weight };
+  return weight;
 }
 
 async function refresh() {
+  const loading = document.querySelector('#loading');
+  loading.hidden = false;
+  document.querySelector('#empty').hidden = true;
   try {
     const [loadedItems, loadedStock, loadedLocations, loadedCompartments] = await Promise.all([
       list('items', '?select=*&order=name.asc,id.asc'),
@@ -111,30 +129,28 @@ async function refresh() {
     compartments = snapshot.compartments;
     offline = true;
     status(`Server nicht erreichbar: ${error.message} Offline-Kopie vom ${new Date(snapshot.savedAt).toLocaleString('de-DE')}. Nur Lesen möglich.`);
+  } finally {
+    loading.hidden = true;
   }
   const categories = [...new Set(items.map((item) => item.category).filter(Boolean))].sort();
   renderCategoryFilters(categories);
   document.querySelector('#categories').replaceChildren(...categories.map((category) => new Option(category)));
   document.querySelector('#add-item').disabled = offline;
-  document.querySelector('#add-stock').disabled = offline || !items.length;
+  document.querySelector('#add-stock').disabled = offline;
   previewPaths = null;
   previewURLs.clear();
   render();
 }
 
 function renderCategoryFilters(categories) {
-  for (const category of selectedCategories) {
-    if (!categories.includes(category)) selectedCategories.delete(category);
-  }
+  if (!categories.includes(selectedCategory)) selectedCategory = '';
   const buttons = ['', ...categories].map((category) => {
     const button = element('button', category || 'Alle Kategorien');
     button.type = 'button';
     button.dataset.category = category;
     button.setAttribute('aria-controls', 'items');
     button.addEventListener('click', () => {
-      if (!category) selectedCategories.clear();
-      else if (selectedCategories.has(category)) selectedCategories.delete(category);
-      else selectedCategories.add(category);
+      selectedCategory = selectedCategory === category ? '' : category;
       render();
     });
     return button;
@@ -147,19 +163,18 @@ function render() {
   const search = document.querySelector('#search').value;
   const onlyWithStock = document.querySelector('#only-with-stock').checked;
   for (const button of document.querySelectorAll('#category-filters button')) {
-    button.setAttribute('aria-pressed', String(button.dataset.category
-      ? selectedCategories.has(button.dataset.category) : !selectedCategories.size));
+    button.setAttribute('aria-pressed', String(button.dataset.category === selectedCategory));
   }
   const itemById = new Map(items.map((item) => [item.id, item]));
   const label = (entry) => locationLabel(entry, locations, compartments);
   const visible = currentView === 'catalog'
     ? items.filter((item) =>
         (!onlyWithStock || stockEntries.some((entry) => entry.item_id === item.id && hasStock(entry))) &&
-        matchesProduct(item, search, selectedCategories,
+        matchesProduct(item, search, selectedCategory,
           stockEntries.filter((entry) => entry.item_id === item.id).map(label)))
     : stockEntries.filter((entry) => hasStock(entry) && itemById.has(entry.item_id) &&
-        matchesProduct(itemById.get(entry.item_id), search, selectedCategories, [label(entry)]));
-  document.querySelector('#empty').hidden = visible.length > 0;
+        matchesProduct(itemById.get(entry.item_id), search, selectedCategory, [label(entry)]));
+  document.querySelector('#empty').hidden = !document.querySelector('#loading').hidden || visible.length > 0;
   document.querySelector('#empty').textContent = currentView === 'catalog'
     ? 'Keine passenden Produkte vorhanden.' : 'Keine passenden Bestandspositionen vorhanden.';
   const renderCard = (record) => {
@@ -168,8 +183,9 @@ function render() {
     const card = element('article', undefined, 'card');
     if (!entry) {
       card.classList.add('catalog-card');
-      const pack = productPackInfo(item.notes);
+      const pack = productPackInfo(item);
       card.append(element('h3', item.name),
+        element('p', `Produktnummer: ${item.product_number || '—'}`, 'muted'),
         element('p', `Teile: ${pack.parts} · Gewicht: ${pack.weight}`, 'muted'),
         element('p', productStockLabel(item.id, stockEntries)));
       const buttons = element('div', undefined, 'actions compact-actions');
@@ -190,8 +206,7 @@ function render() {
     info.append(heading,
       element('p', `Zubereitungszeit: ${item.preparation_minutes != null ? `${item.preparation_minutes} Min.` : '—'}`),
       element('p', `Vorbereitungszeit: ${item.thawing_minutes != null ? `${item.thawing_minutes} Min.` : ''}`),
-      element('p', `Gewicht: ${entry.weight_grams != null
-        ? `${Number(entry.weight_grams).toLocaleString('de-DE', { maximumFractionDigits: 3 })} g` : '—'}`),
+      element('p', `Gewicht pro Packung: ${productWeightLabel(item)}`),
       element('p', `Ort: ${label(entry)}`));
     card.append(preview, info);
     loadStockPreview(item, preview, () => version === renderVersion);
@@ -200,7 +215,9 @@ function render() {
   const content = groupCatalog(visible, (record) =>
     currentView === 'catalog' ? record : itemById.get(record.item_id)).map((group, index) => {
       const section = element('section', undefined, 'category-group');
-      const heading = element('h2', group.category || 'Ohne Kategorie');
+      const productCount = new Set(group.items.map((record) =>
+        currentView === 'catalog' ? record.id : record.item_id)).size;
+      const heading = element('h2', `${group.category || 'Ohne Kategorie'} (${productCount})`);
       heading.id = `category-${index}`;
       section.setAttribute('aria-labelledby', heading.id);
       const cards = element('div', undefined, 'grid');
@@ -274,6 +291,7 @@ function setView(view) {
   document.querySelector('#view-title').textContent = title;
   document.title = `${title} · Eisfach`;
   document.querySelector('#stock-filter').hidden = view !== 'catalog';
+  document.querySelector('#add-item').hidden = view !== 'catalog';
   for (const link of document.querySelectorAll('[data-navigation="stock"], [data-navigation="catalog"]')) {
     if (link.dataset.navigation === view) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
@@ -286,7 +304,7 @@ async function editItem(item) {
   editingItem = item || null;
   editingVersion = item?.updated_at || null;
   form().reset();
-  for (const key of ['id', 'name', 'description', 'category', 'notes', 'preparation_minutes', 'thawing_minutes']) {
+  for (const key of ['id', 'name', 'product_number', 'weight_grams', 'description', 'category', 'notes', 'preparation_minutes', 'thawing_minutes']) {
     form().elements[key].value = item?.[key] ?? '';
   }
   document.querySelector('#editor-title').textContent = item ? 'Produkt bearbeiten' : 'Produkt anlegen';
@@ -341,10 +359,11 @@ async function saveItem(event) {
     const fields = Object.fromEntries(new FormData(form()));
     const id = fields.id || crypto.randomUUID();
     const creating = !fields.id;
-    const body = Object.fromEntries(['name', 'description', 'category', 'notes']
+    const body = Object.fromEntries(['name', 'product_number', 'description', 'category', 'notes']
       .map((key) => [key, fields[key].trim()]));
     body.preparation_minutes = optionalInteger(fields.preparation_minutes);
     body.thawing_minutes = optionalInteger(fields.thawing_minutes);
+    body.weight_grams = optionalWeight(fields.weight_grams);
     if (!body.name) throw new Error('Ein Name ist erforderlich.');
     if (creating) {
       body.id = id;
@@ -368,8 +387,14 @@ async function saveItem(event) {
       await uploadImage(id, files[index], index);
     }
     form().elements.images.value = '';
-    dialog().close();
     await refresh();
+    if (stockDialog().open) {
+      const product = items.find((item) => item.id === id);
+      if (!product) throw new Error('Das Produkt wurde gespeichert, konnte aber nicht neu geladen werden. Bitte die Seite neu laden.');
+      stockForm().elements.product_number_search.value = product.product_number;
+      populateStockProducts(id);
+    }
+    dialog().close();
   } catch (error) {
     feedback.textContent = `${error.message} Bereits gespeicherte Artikeldaten bleiben erhalten; bei teilweisem Bildupload bitte schließen und Bilder prüfen.`;
   } finally {
@@ -393,16 +418,14 @@ function editStock(entry, itemId) {
   stockEditingEntry = entry || null;
   stockEditingVersion = entry?.updated_at || null;
   stockForm().reset();
-  stockForm().elements.item_id.replaceChildren(...items.map((item) => new Option(item.name, item.id)));
   stockForm().elements.id.value = entry?.id ?? '';
-  stockForm().elements.item_id.value = entry?.item_id ?? itemId ?? items[0]?.id ?? '';
+  populateStockProducts(entry?.item_id ?? itemId);
   stockForm().elements.location_id.replaceChildren(new Option('Bitte Ort auswählen', ''),
     ...locations.map((location) => new Option(location.name, location.id)));
   stockForm().elements.location_id.value = entry?.location_id ?? '';
   populateCompartments(stockForm().elements.compartment_id, compartments,
     stockForm().elements.location_id.value, entry?.compartment_id ?? '');
   stockForm().elements.quantity.value = entry?.quantity ?? 1;
-  stockForm().elements.weight_grams.value = entry?.weight_grams ?? '';
   document.querySelector('#stock-title').textContent = entry ? 'Bestandsposition bearbeiten' : 'Bestand hinzufügen';
   document.querySelector('#stock-status').textContent = locations.length
     ? '' : 'Bitte zuerst unter Einstellungen → Gefrierschrank einen Ort anlegen.';
@@ -410,9 +433,29 @@ function editStock(entry, itemId) {
   stockDialog().showModal();
 }
 
+function populateStockProducts(preferredId = stockForm().elements.item_id.value) {
+  const products = filterByProductNumber(items, stockForm().elements.product_number_search.value);
+  const select = stockForm().elements.item_id;
+  select.replaceChildren(...products.map((item) =>
+    new Option(`${item.product_number ? `${item.product_number} · ` : ''}${item.name}`, item.id)));
+  if (!products.length) select.append(new Option('Keine passenden Produkte', ''));
+  select.value = products.some((item) => item.id === preferredId) ? preferredId : products[0]?.id ?? '';
+  updateStockProduct();
+}
+
+function updateStockProduct() {
+  const product = items.find((item) => item.id === stockForm().elements.item_id.value);
+  document.querySelector('#stock-product-weight').textContent = `Gewicht pro Packung: ${productWeightLabel(product)}`;
+  updateStockActions();
+}
+
 function updateStockActions() {
-  stockForm().querySelector('[type=submit]').disabled = stockBusy || offline;
+  stockForm().querySelector('[type=submit]').disabled = stockBusy || offline || !stockForm().elements.item_id.value;
   document.querySelector('#cancel-stock').disabled = stockBusy;
+  document.querySelector('#stock-new-item').disabled = stockBusy || offline;
+  const quantity = Number(stockForm().elements.quantity.value);
+  document.querySelector('#quantity-down').disabled = stockBusy || offline || quantity <= 0;
+  document.querySelector('#quantity-up').disabled = stockBusy || offline || quantity >= 2147483647;
   const remove = document.querySelector('#delete-stock');
   remove.hidden = !stockEditingEntry;
   remove.disabled = stockBusy || offline;
@@ -512,6 +555,23 @@ export async function initInventory() {
   document.querySelector('#only-with-stock').addEventListener('change', render);
   document.querySelector('#add-item').addEventListener('click', () => editItem());
   document.querySelector('#add-stock').addEventListener('click', () => editStock());
+  stockForm().elements.product_number_search.addEventListener('input', () => populateStockProducts());
+  stockForm().elements.item_id.addEventListener('change', updateStockProduct);
+  stockForm().elements.quantity.addEventListener('input', updateStockActions);
+  for (const [id, step] of [['quantity-down', -1], ['quantity-up', 1]]) {
+    document.querySelector(`#${id}`).addEventListener('click', () => {
+      stockForm().elements.quantity.stepUp(step);
+      updateStockActions();
+    });
+  }
+  document.querySelector('#stock-new-item').addEventListener('click', async () => {
+    try {
+      await editItem();
+      form().elements.product_number.value = stockForm().elements.product_number_search.value.trim();
+    } catch (error) {
+      document.querySelector('#stock-status').textContent = error.message;
+    }
+  });
   document.querySelector('#cancel-item').addEventListener('click', () => dialog().close());
   document.querySelector('#delete-item').addEventListener('click', () =>
     editorAction(() => deleteItem(editingItem)));

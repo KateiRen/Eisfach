@@ -90,6 +90,8 @@ sind getrennt:
 | Tabelle / Feld | Bedeutung |
 | --- | --- |
 | `items` | Dauerhafte Produkte mit Name, Beschreibung, freier Kategorie und Notizen; unabhängig davon, ob etwas eingelagert ist |
+| `items.product_number` | Optionale Produktnummer als Text, maximal 100 Zeichen; führende Nullen bleiben erhalten |
+| `items.weight_grams` | Gesamtgewicht einer Packung in Gramm mit bis zu drei Nachkommastellen; leer (`NULL`) bedeutet unbekannt |
 | `items.preparation_minutes` | Zubereitungszeit in ganzen Minuten; leer (`NULL`) bedeutet unbekannt, 0 bedeutet keine Zubereitung |
 | `items.thawing_minutes` | Optionale Auftauzeit in ganzen Minuten; leer (`NULL`) bedeutet unbekannt, 0 bedeutet kein Auftauen |
 | `stock_entries.item_id` | Zugehöriges Produkt; ein Produkt kann beliebig viele Bestandspositionen haben |
@@ -98,15 +100,13 @@ sind getrennt:
 | `stock_entries.location_id` | Verpflichtender Verweis auf einen definierten Ort desselben Inventars |
 | `stock_entries.compartment_id` | Optionales Fach des gewählten Ortes; `NULL` bedeutet „Ohne Fach“ |
 | `stock_entries.quantity` | Nichtnegative ganzzahlige Stückzahl dieser Position |
-| `stock_entries.weight_grams` | Gesamtgewicht dieser Position in Gramm mit bis zu drei Nachkommastellen; leer (`NULL`) bedeutet unbekannt |
 
 Mehrere Positionen für dasselbe Produkt am selben Lagerort sind erlaubt, etwa
-für unterschiedliche Portionen. Das Gewicht ist **nicht** das Stückgewicht und
-wird bei einer Änderung der Stückzahl nicht automatisch hoch- oder heruntergerechnet.
-Gewicht und Stückzahl werden beim Bearbeiten der Position unabhängig gepflegt.
-Eine Position gilt als eingelagert, wenn Stückzahl oder Gewicht größer als 0 sind.
-Eine Position mit Stückzahl 0 und unbekanntem oder 0 Gewicht erscheint nicht im
-Bestand. Das Produkt bleibt im Katalog und lässt sich jederzeit erneut einlagern.
+für unterschiedliche Portionen. Das Gewicht gehört ausschließlich zum Produkt
+und beschreibt immer eine Packung, unabhängig von Lagerort und Stückzahl.
+Es wird nur in der Produktdefinition bearbeitet; der Bestand zeigt es als Information.
+Eine Position gilt ausschließlich bei Stückzahl größer als 0 als eingelagert.
+Das Produkt bleibt auch ohne Bestand im Katalog und lässt sich erneut einlagern.
 
 Bilder gehören weiterhin zum Produkt (`item_images.item_id`), nicht zur
 Bestandsposition. Bestehende Produkt-IDs, Bilderpfade und QR-Codes bleiben gültig.
@@ -162,6 +162,27 @@ durch Fremdschlüssel ersetzt; alte App-Versionen können danach keinen Bestand 
 anlegen. Die alte Offline-Kopie wird wegen des geänderten Formats verworfen;
 nach der Umstellung einmal online laden. Geräteverbindungen bleiben erhalten.
 Bei Fehlern gegebenenfalls `ROLLBACK;` ausführen; keine Teilmigration übernehmen.
+
+#### Produktnummer und Packungsgewicht
+
+Nach den bisherigen Migrationen
+[`supabase/migrations/202611150003_product_details.sql`](./supabase/migrations/202611150003_product_details.sql)
+**einmalig** ausführen. Vorher sichern und Schreibzugriffe pausieren; anschließend
+das passende Frontend veröffentlichen und alle App-Tabs schließen und neu öffnen.
+Die Migration legt Produktnummer und Packungsgewicht bei `items` an. Nummern aus
+eigenen Notizzeilen `Nr: …` werden als Text übernommen; Notizen bleiben erhalten.
+Zu lange Nummern führen zu einem Fehler statt einer stillen Kürzung.
+Gewichtsangaben aus Freitext-Notizen werden nicht automatisch interpretiert.
+
+Vorhandene numerische Bestandsgewichte werden ohne Division oder Multiplikation
+als Packungsgewicht zum jeweiligen Produkt übertragen. Unterschiedliche nichtleere
+Gewichte für dasselbe Produkt brechen die gesamte Migration ab; die Fehlermeldung
+nennt die betroffenen Produkte und Werte. Diese vor einem erneuten Versuch
+abgleichen. Anschließend wird die Gewichtsspalte aus `stock_entries` entfernt.
+Stückzahlen, auch 0, bleiben unverändert. Eine Position mit Stückzahl 0 gilt danach
+nicht mehr allein wegen einer alten Gewichtsangabe als eingelagert.
+Alte Offline-Kopien werden verworfen; nach der Umstellung einmal online laden.
+Die Geräteverbindung bleibt erhalten. Bei einem Abbruch `ROLLBACK;` ausführen.
 
 Der Browser speichert die dauerhafte Geräteverbindung als
 
@@ -239,28 +260,34 @@ Die SQL- und Edge-Quelldateien dürfen öffentlich sein, enthalten aber keine Se
 
 1. Ohne gespeicherte Verbindung öffnet die App `setup.html`. Inventarnamen und
    Gerätenamen eingeben. Das erste Gerät wird zusammen mit dem Inventar angelegt.
-2. In der **Produktliste** Produkte mit Kategorie, Zubereitungszeit und optionaler
-   Auftauzeit anlegen. Der Katalog ist nach Kategorien gruppiert; Kategorien und
+2. In der **Produktliste** Produkte mit optionaler Produktnummer, Packungsgewicht,
+   Kategorie, Zubereitungszeit und optionaler Auftauzeit anlegen. Der Katalog ist nach Kategorien gruppiert; Kategorien und
    Produkte innerhalb jeder Kategorie sind alphabetisch sortiert. Produkte ohne
    Kategorie erscheinen am Ende unter **Ohne Kategorie**. Suche und Kategoriefilter
    schränken die Gruppen auf passende Produkte ein.
-   Katalogkarten zeigen Name, Teile, Packungsgewicht und den aktuellen Bestand
+   Katalogkarten zeigen Name, Produktnummer, Teile, Packungsgewicht und den aktuellen Bestand
    (summierte Stückzahl und Anzahl belegter Positionen) sowie kompakte Buttons
-   **Bearbeiten** und **Einlagern**. Teile und Gewicht stammen aus den Notizzeilen
-   `Teile:` und `Gewicht:`; fehlende Werte erscheinen als „—“. Es wird weder eine
-   Einheit noch ein Gewicht aus dem aktuellen Bestand abgeleitet.
+   **Bearbeiten** und **Einlagern**. Teile stammen aus der Notizzeile `Teile:`,
+   das Gewicht aus dem Produktfeld in Gramm; fehlende Werte erscheinen als „—“.
    Vorhandene Produktbilder stehen im Bearbeitungsdialog direkt über
    **Bilder hinzufügen** und können dort gelöscht werden.
    **Produkt löschen** steht bei gespeicherten Produkten links neben **Speichern**;
    der Bearbeitungsdialog enthält keinen Button **Bilder & QR**.
    Die Listenansichten bieten keinen Produkt-QR-Scan; der QR-Scan zum Verbinden
    weiterer Geräte bleibt verfügbar.
-   Über **Einlagern** Bestandspositionen mit Lagerort, Stückzahl
-   und optionalem Gesamtgewicht hinzufügen. Dasselbe Produkt kann gleichzeitig
+   Über **Einlagern** oder **Bestand hinzufügen** Bestandspositionen mit Lagerort
+   und Stückzahl hinzufügen. Die Produktnummerneingabe filtert die Produktliste
+   nach Teiltreffern; führende Nullen bleiben erhalten. Minus-/Plus-Buttons neben
+   der Stückzahl ändern diese innerhalb von 0 bis 2147483647.
+   **Neues Produkt anlegen** öffnet die Produktdefinition. Nach dem Speichern ist
+   das neue Produkt im Bestandsdialog ausgewählt; Ort, Fach und Stückzahl bleiben
+   erhalten. Beim Schließen ohne Speichern bleibt der vorherige Dialog unverändert.
+   Das funktioniert auch, wenn noch keine Produkte angelegt sind.
+   Dasselbe Produkt kann gleichzeitig
    in mehreren Kühltruhen liegen. Die Ansicht **Bestand** zeigt nur eingelagerte
    Positionen, gruppiert nach Kategorie und darin alphabetisch nach Produktname.
    Jede Karte zeigt genau ein Vorschaubild (das erste Produktbild), Name,
-   Zubereitungszeit, Vorbereitungszeit, Gesamtgewicht dieser Position und Ort/Fach.
+   Zubereitungszeit, Vorbereitungszeit, Packungsgewicht aus dem Produkt und Ort/Fach.
    Die Vorbereitungszeit entspricht ausschließlich der gespeicherten Auftauzeit;
    ist sie unbekannt, bleibt die Angabe leer. Stückzahlen und weitere Angaben
    stehen im Positionsdialog, den ein Klick auf den Namen öffnet. Dort lässt sich
@@ -291,6 +318,11 @@ Die SQL- und Edge-Quelldateien dürfen öffentlich sein, enthalten aber keine Se
 ### Navigation
 
 Das gemeinsame **Menü** bietet **Bestand**, **Produktliste** und **Einstellungen**.
+**Bestand** und **Produktliste** sind zusätzlich direkt in der Kopfzeile verlinkt.
+Die aktive Ansicht ist dort unterstrichen; auf schmalen Bildschirmen können die
+Links in eine weitere Zeile umbrechen.
+**Produkt anlegen** steht ausschließlich in der Produktliste zur Verfügung,
+nicht in der Bestandsansicht.
 Der Inventarname steht klein neben **Eisfach** in der Kopfzeile. Die große
 Seitenüberschrift lautet je nach Ansicht **Bestand**, **Produktliste** oder
 **Einstellungen**; unter Einstellungen bleibt der jeweilige Bereich als
@@ -323,14 +355,21 @@ Bestand und Produktliste sind direkt über
 `app.html#stock` bzw. `app.html#catalog` erreichbar; die Browsernavigation
 wechselt ebenfalls zwischen diesen Ansichten.
 In beiden Ansichten lassen sich Kategorien über eine Button-Leiste einzeln
-aktivieren und deaktivieren. Mehrere aktive Kategorien werden gemeinsam angezeigt.
+aktivieren und deaktivieren. Es ist höchstens eine Kategorie aktiv; ein Klick
+auf eine andere Kategorie wechselt die Auswahl.
 Ohne aktive Kategorie oder mit **Alle Kategorien** werden alle Kategorien
 angezeigt. Die Auswahl bleibt beim Wechsel zwischen Bestand und Produktliste
 erhalten und lässt sich mit der Suche kombinieren; sie wird nicht dauerhaft gespeichert.
+Die Kategorieüberschriften zeigen in Klammern die Anzahl der aktuell gefundenen
+Produkte. Im Bestand zählen mehrere Lagerpositionen desselben Produkts nur einmal;
+Suche und Filter werden bei der Zählung berücksichtigt.
 In der Produktliste blendet der Filter **Nur mit Bestand** Produkte ohne positive
-Stückzahl und ohne positives Gesamtgewicht aus. Er lässt sich mit Suche und
+Stückzahl aus. Er lässt sich mit Suche und
 Kategorie kombinieren und funktioniert auch mit der Offline-Kopie. In der
 Bestandsansicht sind ohnehin nur eingelagerte Positionen sichtbar.
+Während des Seitenstarts und beim Nachladen erscheint **Produkte werden abgerufen**.
+Der Hinweis verschwindet nach Abschluss; Fehler und Hinweise zur Offline-Kopie
+werden separat angezeigt.
 
 ### QR und PWA / Offline
 
@@ -396,8 +435,10 @@ anschließend mit `ROLLBACK`. Die Migration zusätzlich mit einer Kopie der
 bisherigen Daten prüfen.
 
 - [ ] Inventar anlegen; Artikel mit Bild anlegen, suchen, bearbeiten und löschen.
-- [ ] Ein Produkt an zwei Lagerorten einlagern; Stückzahl und Gesamtgewicht
-      unabhängig bearbeiten. Eine Position entfernen: das andere Lager bleibt erhalten.
+- [ ] Ein Produkt mit Produktnummer und Packungsgewicht an zwei Lagerorten einlagern;
+      Stückzahlen unabhängig bearbeiten. Eine Position entfernen: das andere Lager bleibt erhalten.
+- [ ] Nach Produktnummer filtern, Menge mit Plus/Minus ändern und über den Bestandsdialog
+      ein neues Produkt anlegen; dabei Ort, Fach und Stückzahl erhalten.
 - [ ] Orte und Fächer anlegen und umbenennen; Bestand mit und ohne Fach anlegen.
       Fach in seinen übergeordneten Ort umlagern und löschen; ganzen Ort mit
       Ersatzort/-fach löschen. Bestand, Mengen und Gewichte müssen erhalten bleiben.

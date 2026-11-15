@@ -26,6 +26,7 @@ export function action(label, handler, className = 'secondary') {
 
 function initNavigation(page) {
   const nav = document.querySelector('nav[aria-label="Hauptnavigation"]');
+  const shortcuts = element('div', undefined, 'navigation-shortcuts');
   const menu = element('details', undefined, 'navigation-menu');
   menu.append(element('summary', 'Menü'));
   const links = element('div', undefined, 'navigation-links');
@@ -44,6 +45,9 @@ function initNavigation(page) {
     link.dataset.navigation = target;
     if (target === 'stock' || target === 'catalog') {
       links.append(link);
+      const shortcut = link.cloneNode(true);
+      shortcut.addEventListener('click', () => { menu.open = false; });
+      shortcuts.append(shortcut);
     } else {
       settingsLinks.append(link);
       if (page === target) {
@@ -56,7 +60,7 @@ function initNavigation(page) {
   settings.append(settingsLinks);
   links.append(settings);
   menu.append(links);
-  nav.replaceChildren(menu);
+  nav.replaceChildren(shortcuts, menu);
   document.addEventListener('click', (event) => {
     if (!nav.contains(event.target)) menu.open = false;
   });

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 
 globalThis.document = { querySelector: () => null };
 const {
-  hasStock, matchesProduct, optionalInteger, stockValues, groupCatalog, productPackInfo,
+  hasStock, matchesProduct, optionalInteger, optionalWeight, stockValues, groupCatalog, productPackInfo,
+  productWeightLabel, filterByProductNumber,
   productStockLabel, loadProductImages, loadStockPreview,
 } = await import('../js/inventory.js');
 const { saveConnection, clearConnection, saveSnapshot, loadSnapshot } = await import('../js/auth.js');
@@ -16,34 +17,34 @@ globalThis.localStorage = {
   removeItem: (key) => storage.delete(key),
 };
 
-test('Bestand umfasst Stückzahl oder Gewicht, aber keine leeren Positionen', () => {
+test('Nur eine positive Stückzahl ergibt Bestand; alte Gewichte ändern dies nicht', () => {
   assert.equal(hasStock({ quantity: 0, weight_grams: null }), false);
   assert.equal(hasStock({ quantity: 0, weight_grams: '0.000' }), false);
   assert.equal(hasStock({ quantity: 1, weight_grams: null }), true);
-  assert.equal(hasStock({ quantity: 0, weight_grams: '0.001' }), true);
+  assert.equal(hasStock({ quantity: 0, weight_grams: '0.001' }), false);
 });
 
-test('Kategorie-Mehrfachauswahl zeigt gemeinsam gewählte Kategorien und ohne Auswahl alle Produkte', () => {
+test('Kategorie-Einzelauswahl zeigt die gewählte Kategorie und ohne Auswahl alle Produkte', () => {
   const products = [
     { name: 'Lachs', category: 'Fisch' },
     { name: 'Erbsen', category: 'Gemüse' },
     { name: 'Waffeln', category: 'Dessert' },
     { name: 'Brot', category: '' },
   ];
-  const names = (categories) => products
-    .filter((item) => matchesProduct(item, '', new Set(categories))).map((item) => item.name);
-  assert.deepEqual(names(['Fisch', 'Gemüse']), ['Lachs', 'Erbsen']);
-  assert.deepEqual(names(['Gemüse']), ['Erbsen']);
-  assert.deepEqual(names([]), ['Lachs', 'Erbsen', 'Waffeln', 'Brot']);
+  const names = (category) => products
+    .filter((item) => matchesProduct(item, '', category)).map((item) => item.name);
+  assert.deepEqual(names('Fisch'), ['Lachs']);
+  assert.deepEqual(names('Gemüse'), ['Erbsen']);
+  assert.deepEqual(names(''), ['Lachs', 'Erbsen', 'Waffeln', 'Brot']);
 });
 
 test('Kategorie-Buttons bleiben mit Suche nach Produkt und Lagerort kombinierbar', () => {
   const product = { name: 'Lachs', category: 'Fisch', notes: 'Für Gäste' };
-  assert.equal(matchesProduct(product, 'LACHS', new Set(['Fisch', 'Gemüse'])), true);
-  assert.equal(matchesProduct(product, 'GÄSTE', new Set(['Fisch'])), true);
-  assert.equal(matchesProduct(product, 'KELLER', new Set(['Fisch']), ['Keller · Fach 1']), true);
-  assert.equal(matchesProduct(product, 'Keller', new Set(['Gemüse']), ['Keller']), false);
-  assert.equal(matchesProduct(product, 'Erbsen', new Set(['Fisch'])), false);
+  assert.equal(matchesProduct(product, 'LACHS', 'Fisch'), true);
+  assert.equal(matchesProduct(product, 'GÄSTE', 'Fisch'), true);
+  assert.equal(matchesProduct(product, 'KELLER', 'Fisch', ['Keller · Fach 1']), true);
+  assert.equal(matchesProduct(product, 'Keller', 'Gemüse', ['Keller']), false);
+  assert.equal(matchesProduct(product, 'Erbsen', 'Fisch'), false);
 });
 
 test('Katalog gruppiert Kategorien und sortiert Produkte darin deutsch alphabetisch', () => {
@@ -96,16 +97,32 @@ test('Bestand gruppiert Positionen nach Produktkategorie und erhält mehrere Ort
   ]);
 });
 
-test('Katalog zeigt nur Packungsangaben aus eigenen Notizzeilen ohne Zahlenumwandlung', () => {
-  assert.deepEqual(productPackInfo('Nr: 00123\nGewicht: 1,25 kg\nTeile: 6-8\nPreis: 9,99'),
-    { parts: '6-8', weight: '1,25 kg' });
-  assert.deepEqual(productPackInfo('Gewicht:\r\nTeile: 02\r\nHinweis: Gewicht: 500 g'),
+test('Packungsgewicht stammt aus dem Produktfeld und Teile bleiben als Notiztext erhalten', () => {
+  assert.deepEqual(productPackInfo({ notes: 'Gewicht: 1,25 kg\nTeile: 6-8', weight_grams: '500.125' }),
+    { parts: '6-8', weight: '500,125 g' });
+  assert.deepEqual(productPackInfo({ notes: 'Gewicht:\r\nTeile: 02\r\nHinweis: Gewicht: 500 g' }),
     { parts: '02', weight: '—' });
-  assert.deepEqual(productPackInfo('Vorbereitung: Gewicht: 500 g'), { parts: '—', weight: '—' });
+  assert.deepEqual(productPackInfo({ notes: 'Vorbereitung: Teile: 6' }), { parts: '—', weight: '—' });
   assert.deepEqual(productPackInfo(), { parts: '—', weight: '—' });
+  assert.equal(productWeightLabel({ weight_grams: 0 }), '0 g');
+  assert.equal(productWeightLabel(undefined), '—');
 });
 
-test('Katalogbestand summiert Stückzahlen über Orte und berücksichtigt reinen Gewichtsbestand', () => {
+test('Produktnummernfilter erhält führende Nullen und sucht Teiltreffer nur im eigenen Feld', () => {
+  const products = [
+    { id: 'a', product_number: '00123' },
+    { id: 'b', product_number: 'AB-123' },
+    { id: 'c', product_number: '', notes: 'Nr: 00123' },
+  ];
+  assert.deepEqual(filterByProductNumber(products, '001').map((item) => item.id), ['a']);
+  assert.deepEqual(filterByProductNumber(products, '123').map((item) => item.id), ['a', 'b']);
+  assert.deepEqual(filterByProductNumber(products, ' ab- ').map((item) => item.id), ['b']);
+  assert.deepEqual(filterByProductNumber(products, ' '), products);
+  assert.deepEqual(filterByProductNumber(products, '999'), []);
+  assert.equal(matchesProduct({ name: 'Fisch', product_number: '00123' }, '00123', ''), true);
+});
+
+test('Katalogbestand summiert Stückzahlen über Orte und ignoriert alte Gewichte ohne Stückzahl', () => {
   const entries = [
     { item_id: 'fish', quantity: 2, weight_grams: 500 },
     { item_id: 'fish', quantity: 3, weight_grams: null },
@@ -113,7 +130,7 @@ test('Katalogbestand summiert Stückzahlen über Orte und berücksichtigt reinen
     { item_id: 'fruit', quantity: 0, weight_grams: 250 },
   ];
   assert.equal(productStockLabel('fish', entries), 'Bestand: 5 Stück · 2 Positionen');
-  assert.equal(productStockLabel('fruit', entries), 'Bestand: 1 Position');
+  assert.equal(productStockLabel('fruit', entries), 'Kein Bestand');
   assert.equal(productStockLabel('empty', entries), 'Kein Bestand');
   assert.equal(productStockLabel('fish', [{ item_id: 'fish', quantity: 0, weight_grams: 0 }]), 'Kein Bestand');
 });
@@ -213,15 +230,16 @@ test('Bestandsvorschau zeigt nur das erste Bild, teilt Anfragen und meldet Ladef
   assert.equal(stale.textContent, 'Neuer Inhalt');
 });
 
-test('Stückzahl, Gesamtgewicht und Zeiten beachten Grenzen und optionale Werte', () => {
-  assert.deepEqual(stockValues({ quantity: '0', weight_grams: '' }), { quantity: 0, weight_grams: null });
-  assert.deepEqual(stockValues({ quantity: '2147483647', weight_grams: '999999999.999' }),
-    { quantity: 2147483647, weight_grams: 999999999.999 });
-  for (const fields of [
-    { quantity: '', weight_grams: '' }, { quantity: '1.5', weight_grams: '' },
-    { quantity: '2147483648', weight_grams: '' }, { quantity: '1', weight_grams: '-1' },
-    { quantity: '1', weight_grams: '0.0001' }, { quantity: '1', weight_grams: '1000000000' },
-  ]) assert.throws(() => stockValues(fields));
+test('Stückzahl, Produktgewicht und Zeiten beachten Grenzen und optionale Werte', () => {
+  assert.deepEqual(stockValues({ quantity: '0' }), { quantity: 0 });
+  assert.deepEqual(stockValues({ quantity: '2147483647' }), { quantity: 2147483647 });
+  assert.deepEqual(stockValues({ quantity: '1', weight_grams: '500' }), { quantity: 1 });
+  for (const quantity of ['', '-1', '1.5', '2147483648']) assert.throws(() => stockValues({ quantity }));
+  assert.equal(optionalWeight(''), null);
+  assert.equal(optionalWeight('0'), 0);
+  assert.equal(optionalWeight('500.125'), 500.125);
+  assert.equal(optionalWeight('999999999.999'), 999999999.999);
+  for (const value of ['-1', '0.0001', '1000000000', 'NaN', '1e3']) assert.throws(() => optionalWeight(value));
   assert.equal(optionalInteger(''), null);
   assert.equal(optionalInteger('0'), 0);
   assert.equal(optionalInteger('2147483647'), 2147483647);
@@ -248,14 +266,16 @@ test('Orte erlauben kein, ein zugehöriges, aber kein fremdes Fach', () => {
 test('Offline-Kopie speichert Produkte, Bestand und Ortsnamen und verwirft alte Versionen', () => {
   saveConnection({ inventoryId: '11111111-1111-4111-8111-111111111111', deviceId: 'd', deviceToken: 't' });
   storage.set('eisfach.inventory', JSON.stringify({
-    version: 2, inventoryId: '11111111-1111-4111-8111-111111111111',
-    items: [{ id: 'a' }], stockEntries: [{ location: 'Legacy free text' }],
+    version: 3, inventoryId: '11111111-1111-4111-8111-111111111111',
+    items: [{ id: 'a' }], stockEntries: [{ item_id: 'a', location_id: 'cellar', weight_grams: 500 }],
+    locations: [], compartments: [],
   }));
   assert.equal(loadSnapshot(), null);
   const locations = [{ id: 'cellar', name: 'Keller' }];
   const compartments = [{ id: 'c1', location_id: 'cellar', name: 'Fach 1' }];
-  saveSnapshot([{ id: 'a' }], [{ item_id: 'a', quantity: 3 }], locations, compartments);
-  assert.deepEqual(loadSnapshot().items, [{ id: 'a' }]);
+  const products = [{ id: 'a', product_number: '00123', weight_grams: '500.125' }];
+  saveSnapshot(products, [{ item_id: 'a', quantity: 3 }], locations, compartments);
+  assert.deepEqual(loadSnapshot().items, products);
   assert.deepEqual(loadSnapshot().stockEntries, [{ item_id: 'a', quantity: 3 }]);
   assert.deepEqual(loadSnapshot().locations, locations);
   assert.deepEqual(loadSnapshot().compartments, compartments);

@@ -42,6 +42,9 @@ create table public.items (
   id uuid primary key default gen_random_uuid(),
   inventory_id uuid not null references public.inventories(id) on delete cascade,
   name text not null check (char_length(btrim(name)) between 1 and 200),
+  product_number text not null default '' check (char_length(product_number) <= 100),
+  -- Weight of one package, independent of quantities and storage positions.
+  weight_grams numeric(12,3) check (weight_grams >= 0 and weight_grams < 1000000000),
   description text not null default '',
   category text not null default '',
   preparation_minutes integer check (preparation_minutes >= 0),
@@ -81,10 +84,6 @@ create table public.stock_entries (
   location_id uuid not null,
   compartment_id uuid,
   quantity integer not null default 1 check (quantity >= 0),
-  -- Total weight of this position, not weight per piece; NULL means unknown.
-  weight_grams numeric(12,3) check (
-    weight_grams >= 0 and weight_grams < 1000000000
-  ),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   foreign key (inventory_id, item_id)

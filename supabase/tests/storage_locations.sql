@@ -6,8 +6,8 @@ insert into public.inventories(id, name) values
 insert into public.device_registrations(inventory_id, device_id, device_token_hash, device_name)
 values ('11111111-1111-4111-8111-111111111111', 'location-test-device',
   extensions.digest(repeat('a', 64), 'sha256'), 'Test');
-insert into public.items(id, inventory_id, name)
-values ('33333333-3333-4333-8333-333333333333', '11111111-1111-4111-8111-111111111111', 'Fish');
+insert into public.items(id, inventory_id, name, weight_grams)
+values ('33333333-3333-4333-8333-333333333333', '11111111-1111-4111-8111-111111111111', 'Fish', 500.125);
 insert into public.storage_locations(id, inventory_id, name) values
   ('44444444-4444-4444-8444-444444444444', '11111111-1111-4111-8111-111111111111', 'Kitchen'),
   ('55555555-5555-4555-8555-555555555555', '11111111-1111-4111-8111-111111111111', 'Cellar'),
@@ -31,11 +31,11 @@ end;
 $$;
 select set_config('request.headers',
   '{"x-inventory-id":"11111111-1111-4111-8111-111111111111","x-device-id":"location-test-device","x-device-token":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}', true);
-insert into public.stock_entries(inventory_id, item_id, location_id, compartment_id, quantity, weight_grams) values
+insert into public.stock_entries(inventory_id, item_id, location_id, compartment_id, quantity) values
   ('11111111-1111-4111-8111-111111111111', '33333333-3333-4333-8333-333333333333',
-   '44444444-4444-4444-8444-444444444444', null, 2, 500.125),
+   '44444444-4444-4444-8444-444444444444', null, 2),
   ('11111111-1111-4111-8111-111111111111', '33333333-3333-4333-8333-333333333333',
-   '44444444-4444-4444-8444-444444444444', '77777777-7777-4777-8777-777777777777', 0, 250);
+   '44444444-4444-4444-8444-444444444444', '77777777-7777-4777-8777-777777777777', 0);
 
 do $$
 declare
@@ -115,8 +115,8 @@ begin
     raise exception 'Location deletion did not relocate every position';
   end if;
   if (select sum(quantity) from public.stock_entries) <> 2
-    or (select sum(weight_grams) from public.stock_entries) <> 750.125 then
-    raise exception 'Relocation changed quantity or weight';
+    or (select weight_grams from public.items where id = '33333333-3333-4333-8333-333333333333') <> 500.125 then
+    raise exception 'Relocation changed quantity or product weight';
   end if;
   if exists (select 1 from public.storage_locations where id = '44444444-4444-4444-8444-444444444444') then
     raise exception 'Source location still exists';
