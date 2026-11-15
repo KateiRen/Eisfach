@@ -15,6 +15,7 @@ Geräteprüfung, Bildspeicher und serverseitige Funktionen laufen ausschließlic
 ├── devices.html               Geräteverwaltung
 ├── freezer.html               Orte und Fächer verwalten
 ├── appearance.html            Persönliche Akzentfarben
+├── transfer.html              JSON-Export und ergänzender Import
 ├── css/app.css                Mobile-First-Layout
 ├── js/
 │   ├── config.js              Öffentliche Supabase-Konfiguration
@@ -26,6 +27,7 @@ Geräteprüfung, Bildspeicher und serverseitige Funktionen laufen ausschließlic
 │   ├── inventory.js           Produktkatalog und Bestände je Lagerort
 │   ├── devices.js             Geräte und einmalige Join-Codes
 │   ├── appearance.js          Lokale Farbeinstellungen und Vorschau
+│   ├── transfer.js            JSON-Sicherung, Prüfung und Import
 │   └── app.js                 Seitenstart
 ├── assets/                    App-Icon und lokale QR-Bibliotheken mit Lizenzen
 ├── manifest.json
@@ -38,6 +40,35 @@ Geräteprüfung, Bildspeicher und serverseitige Funktionen laufen ausschließlic
 ├── .nojekyll
 └── README.md
 ```
+
+## JSON-Export und Import
+
+Unter **Menü → Einstellungen → Export/Import** lassen sich Produkte,
+Bestandspositionen (einschließlich Menge 0), Lagerorte und Fächer als versionierte
+Eisfach-JSON-Datei herunterladen und importieren. Bilder und Bildverweise,
+Gerätezugänge sowie persönliche Anzeigeeinstellungen sind nicht enthalten.
+Die Datei enthält Produkttexte und sollte entsprechend vertraulich aufbewahrt werden.
+Export und Import benötigen Internet und die aktuelle Produktdetails-Migration.
+Eine zusätzliche Datenbankmigration ist für diese Funktion nicht erforderlich.
+
+Der Import prüft Format, Werte, doppelte IDs und sämtliche Verweise vor dem
+ersten Schreibzugriff. Nach Dateiauswahl (maximal 10 MB) werden die enthaltenen
+Anzahlen angezeigt; erst nach Bestätigung wird importiert. Vorhandene Daten
+werden weder geändert noch gelöscht, Bestandsmengen nicht addiert. Produkte
+und Positionen werden anhand ihrer IDs erkannt, nicht anhand gleicher Namen
+oder Produktnummern. Gleich benannte Orte und Fächer desselben Ortes werden
+wiederverwendet. Bei Import in ein anderes Inventar werden IDs deterministisch
+umgesetzt; wiederholter Import derselben Datei erzeugt deshalb keine Duplikate.
+Bereits vorhandene Datensätze werden übersprungen, nicht auf den Sicherungsstand
+zurückgesetzt. Zwischenzeitlich veränderte Ortszuordnungen können einen Import
+abbrechen, statt Bestand stillschweigend einem anderen Ort zuzuordnen.
+
+Der Import läuft schrittweise, **nicht als gemeinsame Datenbanktransaktion**.
+Bei Fehlern werden die bereits ergänzten Datensätze und ihre Anzahl gemeldet.
+Dieselbe Datei kann erneut importiert werden, um fortzufahren. Ein Export ist
+ebenfalls keine atomare Datenbanksicherung: Während Export und Import auf
+allen Geräten Änderungen pausieren. Die bestehende Datenbank vorher separat
+sichern. Nach einem Import die Bestands- und Produktliste neu laden.
 
 ## Supabase einrichten
 

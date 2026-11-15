@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#126b73">
+  <title>Einstellungen · Export/Import · Eisfach</title>
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="./css/app.css">
+  <script type="module" src="./js/app.js"></script>
+</head>
+<body data-page="transfer">
+  <header><div class="brand"><a href="./app.html">❄ Eisfach</a><span id="inventory-name" class="inventory-name">Dein Inventar</span></div><nav aria-label="Hauptnavigation"></nav></header>
+  <main class="narrow">
+    <h1>Einstellungen</h1>
+    <h2>Export/Import</h2>
+    <p id="status" role="status"></p>
+    <p>Export und Import benötigen eine Internetverbindung.</p>
+    <section class="card">
+      <h2>JSON exportieren</h2>
+      <p>Produkte, Bestandspositionen, Lagerorte und Fächer sichern. Bilder, Bildverweise und Gerätezugänge werden nicht exportiert. Während des Exports bitte keine Daten ändern.</p>
+      <button id="export-json" type="button">JSON herunterladen</button>
+    </section>
+    <form id="import-form" class="card">
+      <h2>JSON importieren</h2>
+      <p>Ergänzt das verbundene Inventar, ohne vorhandene Daten zu ändern oder zu löschen. Bereits importierte Datensätze werden übersprungen; gleiche Orts- und Fachnamen werden wiederverwendet. Produkte werden anhand ihrer ID erkannt, nicht anhand von Name oder Produktnummer.</p>
+      <label for="import-file">Eisfach-JSON-Datei (maximal 10 MB)</label>
+      <input id="import-file" type="file" accept=".json,application/json" required>
+      <p id="import-preview" role="status">Bitte eine Exportdatei auswählen.</p>
+      <label class="checkbox-label"><input id="import-confirm" type="checkbox" required> Daten in dieses Inventar übernehmen</label>
+      <p>Ein Import läuft schrittweise. Bei einem Fehler bleiben bereits ergänzte Daten erhalten. Dieselbe Datei kann erneut importiert werden, ohne diese Daten zu duplizieren. Bestandsmengen werden weder addiert noch abgeglichen. Bitte währenddessen keine Daten auf anderen Geräten ändern.</p>
+      <button id="import-json" type="submit" disabled>Importieren</button>
+    </form>
+  </main>
+</body>
+</html>
