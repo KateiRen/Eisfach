@@ -13,6 +13,7 @@ Geräteprüfung, Bildspeicher und serverseitige Funktionen laufen ausschließlic
 ├── setup.html                 Neues Inventar / Gerät verbinden
 ├── app.html                   Inventar
 ├── devices.html               Geräteverwaltung
+├── freezer.html               Platzhalter für Gefrierschrank-Einstellungen
 ├── css/app.css                Mobile-First-Layout
 ├── js/
 │   ├── config.js              Öffentliche Supabase-Konfiguration
@@ -236,6 +237,16 @@ Die SQL- und Edge-Quelldateien dürfen öffentlich sein, enthalten aber keine Se
    ist gleichberechtigt. Das letzte aktive Gerät nicht ohne Ersatz deaktivieren
    oder löschen: Es gibt absichtlich keine Hintertür über die Inventar-ID.
    Verlorene Zugänge können nur Projektadministratoren serverseitig wiederherstellen.
+
+### Navigation
+
+Das gemeinsame **Menü** bietet **Bestand**, **Produktkatalog** und **Einstellungen**.
+Unter **Einstellungen → Geräte** liegt die bisherige Geräteverwaltung.
+**Einstellungen → Gefrierschrank** öffnet vorerst eine Hinweisseite; eine eigene
+Gefrierschrankverwaltung ist noch nicht implementiert. Lagerorte bleiben freie
+Angaben an den Bestandspositionen. Bestand und Produktkatalog sind direkt über
+`app.html#stock` bzw. `app.html#catalog` erreichbar; die Browsernavigation
+wechselt ebenfalls zwischen diesen Ansichten.
 
 ### QR und PWA / Offline
 

@@ -23,6 +23,49 @@ export function action(label, handler, className = 'secondary') {
   return button;
 }
 
+function initNavigation(page) {
+  const nav = document.querySelector('nav[aria-label="Hauptnavigation"]');
+  const menu = element('details', undefined, 'navigation-menu');
+  menu.append(element('summary', 'Menü'));
+  const links = element('div', undefined, 'navigation-links');
+  const settings = element('details');
+  settings.append(element('summary', 'Einstellungen'));
+  const settingsLinks = element('div', undefined, 'settings-links');
+  for (const [label, href, target] of [
+    ['Bestand', './app.html#stock', 'stock'],
+    ['Produktkatalog', './app.html#catalog', 'catalog'],
+    ['Geräte', './devices.html', 'devices'],
+    ['Gefrierschrank', './freezer.html', 'freezer'],
+  ]) {
+    const link = element('a', label);
+    link.href = href;
+    link.dataset.navigation = target;
+    if (target === 'stock' || target === 'catalog') {
+      links.append(link);
+    } else {
+      settingsLinks.append(link);
+      if (page === target) {
+        link.setAttribute('aria-current', 'page');
+        settings.open = true;
+      }
+    }
+    link.addEventListener('click', () => { menu.open = false; });
+  }
+  settings.append(settingsLinks);
+  links.append(settings);
+  menu.append(links);
+  nav.replaceChildren(menu);
+  document.addEventListener('click', (event) => {
+    if (!nav.contains(event.target)) menu.open = false;
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && menu.open) {
+      menu.open = false;
+      menu.querySelector('summary').focus();
+    }
+  });
+}
+
 async function init() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js').catch(() => {});
@@ -42,6 +85,7 @@ async function init() {
     location.replace('./setup.html');
     return;
   }
+  initNavigation(page);
   if (navigator.onLine) {
     try { await checkConnection(); } catch (error) {
       if (error.revoked) {

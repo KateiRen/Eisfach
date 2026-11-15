@@ -119,10 +119,10 @@ function render() {
 
 function setView(view) {
   currentView = view;
-  for (const name of ['stock', 'catalog']) {
-    const button = document.querySelector(`#view-${name}`);
-    button.setAttribute('aria-pressed', String(name === view));
-    button.className = name === view ? '' : 'secondary';
+  document.querySelector('#view-title').textContent = view === 'catalog' ? 'Produktkatalog' : 'Bestand';
+  for (const link of document.querySelectorAll('[data-navigation="stock"], [data-navigation="catalog"]')) {
+    if (link.dataset.navigation === view) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
   }
   render();
 }
@@ -297,8 +297,9 @@ export async function initInventory() {
     document.querySelectorAll('#detail-images button').forEach((button) => { button.disabled = true; });
     render();
   });
-  document.querySelector('#view-stock').addEventListener('click', () => setView('stock'));
-  document.querySelector('#view-catalog').addEventListener('click', () => setView('catalog'));
+  const syncView = () => setView(location.hash === '#catalog' ? 'catalog' : 'stock');
+  window.addEventListener('hashchange', syncView);
+  syncView();
   document.querySelector('#search').addEventListener('input', render);
   document.querySelector('#category').addEventListener('change', render);
   document.querySelector('#add-item').addEventListener('click', () => editItem());
