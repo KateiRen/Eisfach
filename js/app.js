@@ -1,5 +1,5 @@
 import { loadConnection, clearConnection } from './auth.js';
-import { checkConnection } from './supabase.js';
+import { checkConnection, rest } from './supabase.js';
 import { loadAppearance, applyAppearance, initAppearance } from './appearance.js';
 
 export function status(message) {
@@ -34,7 +34,7 @@ function initNavigation(page) {
   const settingsLinks = element('div', undefined, 'settings-links');
   for (const [label, href, target] of [
     ['Bestand', './app.html#stock', 'stock'],
-    ['Produktkatalog', './app.html#catalog', 'catalog'],
+    ['Produktliste', './app.html#catalog', 'catalog'],
     ['Geräte', './devices.html', 'devices'],
     ['Gefrierschrank', './freezer.html', 'freezer'],
     ['Aussehen', './appearance.html', 'appearance'],
@@ -91,7 +91,11 @@ async function init() {
   initNavigation(page);
   if (page === 'appearance') initAppearance();
   if (navigator.onLine) {
-    try { await checkConnection(); } catch (error) {
+    try {
+      await checkConnection();
+      const inventories = await rest('inventories', '?select=name');
+      document.querySelector('#inventory-name').textContent = inventories[0]?.name || 'Dein Inventar';
+    } catch (error) {
       if (error.revoked) {
         clearConnection();
         location.replace('./setup.html?revoked=1');

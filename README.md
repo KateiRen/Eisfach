@@ -239,7 +239,7 @@ Die SQL- und Edge-Quelldateien dürfen öffentlich sein, enthalten aber keine Se
 
 1. Ohne gespeicherte Verbindung öffnet die App `setup.html`. Inventarnamen und
    Gerätenamen eingeben. Das erste Gerät wird zusammen mit dem Inventar angelegt.
-2. Im **Produktkatalog** Produkte mit Kategorie, Zubereitungszeit und optionaler
+2. In der **Produktliste** Produkte mit Kategorie, Zubereitungszeit und optionaler
    Auftauzeit anlegen. Der Katalog ist nach Kategorien gruppiert; Kategorien und
    Produkte innerhalb jeder Kategorie sind alphabetisch sortiert. Produkte ohne
    Kategorie erscheinen am Ende unter **Ohne Kategorie**. Suche und Kategoriefilter
@@ -290,7 +290,11 @@ Die SQL- und Edge-Quelldateien dürfen öffentlich sein, enthalten aber keine Se
 
 ### Navigation
 
-Das gemeinsame **Menü** bietet **Bestand**, **Produktkatalog** und **Einstellungen**.
+Das gemeinsame **Menü** bietet **Bestand**, **Produktliste** und **Einstellungen**.
+Der Inventarname steht klein neben **Eisfach** in der Kopfzeile. Die große
+Seitenüberschrift lautet je nach Ansicht **Bestand**, **Produktliste** oder
+**Einstellungen**; unter Einstellungen bleibt der jeweilige Bereich als
+Unterüberschrift sichtbar.
 Unter **Einstellungen → Geräte** liegt die bisherige Geräteverwaltung.
 Unter **Einstellungen → Aussehen** ist **Akzentfarbe** die erste Einstellung.
 Die Hauptfarbe gestaltet Kopfzeile und Buttons; eine optionale zweite Akzentfarbe
@@ -315,10 +319,10 @@ Die Bestandsverwaltung bietet ausschließlich Dropdowns für definierte Orte und
 zugehörige Fächer; **Ohne Fach** ist bei jedem Ort möglich. Zuerst mindestens einen
 Ort anlegen. Die Ortsverwaltung benötigt Internet; Bestände einschließlich Orts-
 und Fachnamen sind nach erfolgreichem Laden weiterhin offline lesbar.
-Bestand und Produktkatalog sind direkt über
+Bestand und Produktliste sind direkt über
 `app.html#stock` bzw. `app.html#catalog` erreichbar; die Browsernavigation
 wechselt ebenfalls zwischen diesen Ansichten.
-Im Produktkatalog blendet der Filter **Nur mit Bestand** Produkte ohne positive
+In der Produktliste blendet der Filter **Nur mit Bestand** Produkte ohne positive
 Stückzahl und ohne positives Gesamtgewicht aus. Er lässt sich mit Suche und
 Kategorie kombinieren und funktioniert auch mit der Offline-Kopie. In der
 Bestandsansicht sind ohnehin nur eingelagerte Positionen sichtbar.

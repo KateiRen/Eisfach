@@ -3,6 +3,10 @@
 body { margin: 0; }
 header { background: var(--accent); color: var(--accent-foreground); padding: 1rem max(1rem, calc((100% - 1120px) / 2)); display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
 header a { color: var(--accent-foreground); font-weight: 700; text-decoration: none; }
+.brand { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem .75rem; min-width: 0; }
+.brand > a { white-space: nowrap; }
+.inventory-name { font-size: .875rem; overflow-wrap: anywhere; }
+header nav { flex-shrink: 0; }
 .navigation-menu { position: relative; }
 .navigation-menu summary { cursor: pointer; min-height: 44px; padding: .7rem; font-weight: 600; }
 .navigation-links { position: absolute; right: 0; top: 100%; z-index: 10; width: min(280px, calc(100vw - 2rem)); padding: .5rem; border: 1px solid #8aafb2; border-radius: .6rem; background: white; color: #17343a; box-shadow: 0 4px 16px #17343a30; }

@@ -4,18 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#126b73">
-  <title>Inventar · Eisfach</title>
+  <title>Bestand · Eisfach</title>
   <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
   <link rel="manifest" href="./manifest.json">
   <link rel="stylesheet" href="./css/app.css">
   <script type="module" src="./js/app.js"></script>
 </head>
 <body data-page="inventory">
-  <header><a href="./app.html">❄ Eisfach</a><nav aria-label="Hauptnavigation"></nav></header>
+  <header><div class="brand"><a href="./app.html">❄ Eisfach</a><span id="inventory-name" class="inventory-name">Dein Inventar</span></div><nav aria-label="Hauptnavigation"></nav></header>
   <main>
-    <h1 id="inventory-name">Dein Inventar</h1>
+    <h1 id="view-title">Bestand</h1>
     <p id="status" role="status"></p>
-    <h2 id="view-title">Bestand</h2>
     <div class="toolbar">
       <label>Suche<input id="search" type="search" placeholder="Name, Notizen, Lagerort …"></label>
       <label>Kategorie<select id="category"><option value="">Alle Kategorien</option></select></label>

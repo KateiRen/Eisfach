@@ -244,7 +244,9 @@ export async function loadStockPreview(item, preview, isCurrent) {
 
 function setView(view) {
   currentView = view;
-  document.querySelector('#view-title').textContent = view === 'catalog' ? 'Produktkatalog' : 'Bestand';
+  const title = view === 'catalog' ? 'Produktliste' : 'Bestand';
+  document.querySelector('#view-title').textContent = title;
+  document.title = `${title} · Eisfach`;
   document.querySelector('#stock-filter').hidden = view !== 'catalog';
   for (const link of document.querySelectorAll('[data-navigation="stock"], [data-navigation="catalog"]')) {
     if (link.dataset.navigation === view) link.setAttribute('aria-current', 'page');
@@ -519,8 +521,4 @@ export async function initInventory() {
       stockForm().elements.location_id.value);
   });
   await refresh();
-  if (!offline) {
-    const inventories = await rest('inventories', '?select=name');
-    document.querySelector('#inventory-name').textContent = inventories[0]?.name || 'Dein Inventar';
-  }
 }
