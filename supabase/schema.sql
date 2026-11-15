@@ -54,11 +54,32 @@ create table public.items (
 );
 create index items_inventory_idx on public.items(inventory_id);
 
+create table public.storage_locations (
+  id uuid primary key default gen_random_uuid(),
+  inventory_id uuid not null references public.inventories(id) on delete cascade,
+  name text not null check (char_length(btrim(name)) between 1 and 200),
+  updated_at timestamptz not null default now(),
+  unique (inventory_id, id),
+  unique (inventory_id, name)
+);
+create table public.storage_compartments (
+  id uuid primary key default gen_random_uuid(),
+  inventory_id uuid not null,
+  location_id uuid not null,
+  name text not null check (char_length(btrim(name)) between 1 and 200),
+  updated_at timestamptz not null default now(),
+  foreign key (inventory_id, location_id)
+    references public.storage_locations(inventory_id, id) on delete cascade,
+  unique (inventory_id, location_id, id),
+  unique (location_id, name)
+);
+
 create table public.stock_entries (
   id uuid primary key default gen_random_uuid(),
   inventory_id uuid not null references public.inventories(id) on delete cascade,
   item_id uuid not null,
-  location text not null default '' check (char_length(location) <= 200),
+  location_id uuid not null,
+  compartment_id uuid,
   quantity integer not null default 1 check (quantity >= 0),
   -- Total weight of this position, not weight per piece; NULL means unknown.
   weight_grams numeric(12,3) check (
@@ -67,10 +88,15 @@ create table public.stock_entries (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   foreign key (inventory_id, item_id)
-    references public.items(inventory_id, id) on delete cascade
+    references public.items(inventory_id, id) on delete cascade,
+  foreign key (inventory_id, location_id)
+    references public.storage_locations(inventory_id, id),
+  foreign key (inventory_id, location_id, compartment_id)
+    references public.storage_compartments(inventory_id, location_id, id)
 );
 create index stock_entries_item_idx on public.stock_entries(item_id);
 create index stock_entries_inventory_idx on public.stock_entries(inventory_id);
+create index stock_entries_location_idx on public.stock_entries(location_id, compartment_id);
 
 create table public.item_images (
   id uuid primary key default gen_random_uuid(),
@@ -103,22 +129,27 @@ alter table public.join_tokens enable row level security;
 alter table public.device_registrations enable row level security;
 alter table public.items enable row level security;
 alter table public.stock_entries enable row level security;
+alter table public.storage_locations enable row level security;
+alter table public.storage_compartments enable row level security;
 alter table public.item_images enable row level security;
 alter table public.audit_log enable row level security;
 alter table public.registration_rate_limits enable row level security;
 
 -- Never expose the credential hash columns, even through SELECT * or RETURNING *.
 revoke all on public.inventories, public.join_tokens, public.device_registrations,
-  public.items, public.stock_entries, public.item_images, public.audit_log, public.registration_rate_limits
+  public.items, public.stock_entries, public.storage_locations, public.storage_compartments,
+  public.item_images, public.audit_log, public.registration_rate_limits
   from public, anon, authenticated;
 grant select on public.inventories, public.audit_log to anon, authenticated;
 grant select, insert, update, delete on public.items, public.stock_entries, public.item_images to anon, authenticated;
+grant select, insert, update, delete on public.storage_locations, public.storage_compartments to anon, authenticated;
 grant select (id, inventory_id, device_id, device_name, revoked, created_at, last_seen_at)
   on public.device_registrations to anon, authenticated;
 grant update (device_name) on public.device_registrations to anon, authenticated;
 grant delete on public.device_registrations to anon, authenticated;
 grant all on public.inventories, public.join_tokens, public.device_registrations,
-  public.items, public.stock_entries, public.item_images, public.audit_log, public.registration_rate_limits
+  public.items, public.stock_entries, public.storage_locations, public.storage_compartments,
+  public.item_images, public.audit_log, public.registration_rate_limits
   to service_role;
 
 create function public.current_inventory_id()
@@ -181,6 +212,12 @@ create policy stock_update on public.stock_entries for update to anon, authentic
   with check (inventory_id = (select public.current_inventory_id()));
 create policy stock_delete on public.stock_entries for delete to anon, authenticated
   using (inventory_id = (select public.current_inventory_id()));
+create policy locations_access on public.storage_locations for all to anon, authenticated
+  using (inventory_id = (select public.current_inventory_id()))
+  with check (inventory_id = (select public.current_inventory_id()));
+create policy compartments_access on public.storage_compartments for all to anon, authenticated
+  using (inventory_id = (select public.current_inventory_id()))
+  with check (inventory_id = (select public.current_inventory_id()));
 create policy audit_read on public.audit_log for select to anon, authenticated
   using (inventory_id = (select public.current_inventory_id()));
 
@@ -276,6 +313,83 @@ create trigger items_updated_at before update on public.items
   for each row execute function public.set_item_updated_at();
 create trigger stock_updated_at before update on public.stock_entries
   for each row execute function public.set_item_updated_at();
+create trigger locations_updated_at before update on public.storage_locations
+  for each row execute function public.set_item_updated_at();
+create trigger compartments_updated_at before update on public.storage_compartments
+  for each row execute function public.set_item_updated_at();
+
+create function public.delete_storage_location(
+  p_location_id uuid, p_compartment_id uuid, p_updated_at timestamptz,
+  p_target_location_id uuid, p_target_compartment_id uuid
+)
+returns integer
+language plpgsql
+set search_path = ''
+as $$
+declare
+  inventory uuid := public.current_inventory_id();
+  source_version timestamptz;
+  moved integer;
+begin
+  if inventory is null then
+    raise exception 'Kein berechtigtes Gerät.' using errcode = '42501';
+  end if;
+  -- Serialize relocations within the inventory and lock out concurrent deletion.
+  perform id from public.storage_locations
+    where inventory_id = inventory order by id for update;
+  if p_compartment_id is null then
+    select updated_at into source_version from public.storage_locations
+      where inventory_id = inventory and id = p_location_id;
+  else
+    select updated_at into source_version from public.storage_compartments
+      where inventory_id = inventory and location_id = p_location_id
+        and id = p_compartment_id for update;
+  end if;
+  if source_version is null or source_version is distinct from p_updated_at then
+    raise exception 'Ort oder Fach wurde zwischenzeitlich geändert oder entfernt. Bitte neu laden.';
+  end if;
+  if p_target_location_id is null then
+    if p_target_compartment_id is not null or exists (
+      select 1 from public.stock_entries where inventory_id = inventory
+        and location_id = p_location_id
+        and (p_compartment_id is null or compartment_id = p_compartment_id)
+    ) then
+      raise exception 'Bitte einen Ersatzort für die vorhandenen Bestände auswählen.';
+    end if;
+  else
+    if not exists (
+      select 1 from public.storage_locations
+      where inventory_id = inventory and id = p_target_location_id
+    ) or (p_compartment_id is null and p_target_location_id = p_location_id)
+      or (p_compartment_id is not null and p_target_compartment_id = p_compartment_id) then
+      raise exception 'Ungültiger Ersatzort.';
+    end if;
+    if p_target_compartment_id is not null and not exists (
+      select 1 from public.storage_compartments
+      where inventory_id = inventory and location_id = p_target_location_id
+        and id = p_target_compartment_id
+    ) then
+      raise exception 'Das Ersatzfach gehört nicht zum gewählten Ort.';
+    end if;
+  end if;
+  update public.stock_entries
+    set location_id = p_target_location_id, compartment_id = p_target_compartment_id
+    where inventory_id = inventory and location_id = p_location_id
+      and (p_compartment_id is null or compartment_id = p_compartment_id);
+  get diagnostics moved = row_count;
+  if p_compartment_id is null then
+    delete from public.storage_locations where inventory_id = inventory and id = p_location_id;
+  else
+    delete from public.storage_compartments
+      where inventory_id = inventory and location_id = p_location_id and id = p_compartment_id;
+  end if;
+  return moved;
+end;
+$$;
+revoke all on function public.delete_storage_location(uuid, uuid, timestamptz, uuid, uuid)
+  from public, anon, authenticated;
+grant execute on function public.delete_storage_location(uuid, uuid, timestamptz, uuid, uuid)
+  to anon, authenticated;
 
 create function public.audit_stock_change()
 returns trigger

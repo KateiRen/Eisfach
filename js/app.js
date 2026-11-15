@@ -98,6 +98,7 @@ async function init() {
   }
   if (page === 'inventory') await (await import('./inventory.js')).initInventory();
   if (page === 'devices') await (await import('./devices.js')).initDevices();
+  if (page === 'freezer') await (await import('./freezer.js')).initFreezer();
 }
 
 // Beim Import durch Seitenmodule nicht erneut initialisieren.

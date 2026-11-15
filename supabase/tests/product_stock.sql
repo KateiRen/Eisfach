@@ -12,18 +12,23 @@ values (
 insert into public.items(id, inventory_id, name, preparation_minutes, thawing_minutes) values
   ('33333333-3333-4333-8333-333333333333', '11111111-1111-4111-8111-111111111111', 'Fish', 20, 0),
   ('44444444-4444-4444-8444-444444444444', '22222222-2222-4222-8222-222222222222', 'Other', null, null);
+insert into public.storage_locations(id, inventory_id, name) values
+  ('55555555-5555-4555-8555-555555555555', '11111111-1111-4111-8111-111111111111', 'Cellar'),
+  ('66666666-6666-4666-8666-666666666666', '11111111-1111-4111-8111-111111111111', 'Kitchen');
 
 do $$
 begin
   begin
-    insert into public.stock_entries(inventory_id, item_id)
-    values ('11111111-1111-4111-8111-111111111111', '44444444-4444-4444-8444-444444444444');
+    insert into public.stock_entries(inventory_id, item_id, location_id)
+    values ('11111111-1111-4111-8111-111111111111', '44444444-4444-4444-8444-444444444444',
+      '55555555-5555-4555-8555-555555555555');
     raise exception 'Cross-inventory product reference accepted';
   exception when foreign_key_violation then null;
   end;
   begin
-    insert into public.stock_entries(inventory_id, item_id, weight_grams)
-    values ('11111111-1111-4111-8111-111111111111', '33333333-3333-4333-8333-333333333333', -1);
+    insert into public.stock_entries(inventory_id, item_id, location_id, weight_grams)
+    values ('11111111-1111-4111-8111-111111111111', '33333333-3333-4333-8333-333333333333',
+      '55555555-5555-4555-8555-555555555555', -1);
     raise exception 'Negative weight accepted';
   exception when check_violation then null;
   end;
@@ -42,8 +47,9 @@ begin
     raise exception 'Unauthenticated read allowed';
   end if;
   begin
-    insert into public.stock_entries(inventory_id, item_id)
-    values ('11111111-1111-4111-8111-111111111111', '33333333-3333-4333-8333-333333333333');
+    insert into public.stock_entries(inventory_id, item_id, location_id)
+    values ('11111111-1111-4111-8111-111111111111', '33333333-3333-4333-8333-333333333333',
+      '55555555-5555-4555-8555-555555555555');
     raise exception 'Unauthenticated write allowed';
   exception when insufficient_privilege then null;
   end;
@@ -51,10 +57,10 @@ end;
 $$;
 select set_config('request.headers',
   '{"x-inventory-id":"11111111-1111-4111-8111-111111111111","x-device-id":"stock-test-device","x-device-token":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}', true);
-insert into public.stock_entries(inventory_id, item_id, location, quantity, weight_grams) values
-  ('11111111-1111-4111-8111-111111111111', '33333333-3333-4333-8333-333333333333', 'Cellar', 2, 500.125),
-  ('11111111-1111-4111-8111-111111111111', '33333333-3333-4333-8333-333333333333', 'Kitchen', 1, null),
-  ('11111111-1111-4111-8111-111111111111', '33333333-3333-4333-8333-333333333333', 'Cellar', 0, 250);
+insert into public.stock_entries(inventory_id, item_id, location_id, quantity, weight_grams) values
+  ('11111111-1111-4111-8111-111111111111', '33333333-3333-4333-8333-333333333333', '55555555-5555-4555-8555-555555555555', 2, 500.125),
+  ('11111111-1111-4111-8111-111111111111', '33333333-3333-4333-8333-333333333333', '66666666-6666-4666-8666-666666666666', 1, null),
+  ('11111111-1111-4111-8111-111111111111', '33333333-3333-4333-8333-333333333333', '55555555-5555-4555-8555-555555555555', 0, 250);
 do $$
 begin
   if (select count(*) from public.stock_entries where item_id = '33333333-3333-4333-8333-333333333333') <> 3 then
@@ -64,8 +70,9 @@ begin
     raise exception 'Other inventory product visible';
   end if;
   begin
-    insert into public.stock_entries(inventory_id, item_id)
-    values ('22222222-2222-4222-8222-222222222222', '44444444-4444-4444-8444-444444444444');
+    insert into public.stock_entries(inventory_id, item_id, location_id)
+    values ('22222222-2222-4222-8222-222222222222', '44444444-4444-4444-8444-444444444444',
+      '55555555-5555-4555-8555-555555555555');
     raise exception 'Other inventory stock writable';
   exception when insufficient_privilege then null;
   end;
@@ -87,8 +94,9 @@ begin
   end if;
 end;
 $$;
-insert into public.stock_entries(inventory_id, item_id, quantity)
-values ('11111111-1111-4111-8111-111111111111', '33333333-3333-4333-8333-333333333333', 1);
+insert into public.stock_entries(inventory_id, item_id, location_id, quantity)
+values ('11111111-1111-4111-8111-111111111111', '33333333-3333-4333-8333-333333333333',
+  '55555555-5555-4555-8555-555555555555', 1);
 delete from public.items where id = '33333333-3333-4333-8333-333333333333';
 do $$
 begin

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 globalThis.document = { querySelector: () => null };
 const { hasStock, optionalInteger, stockValues } = await import('../js/inventory.js');
 const { saveConnection, clearConnection, saveSnapshot, loadSnapshot } = await import('../js/auth.js');
+const { locationSelection, locationLabel } = await import('../js/locations.js');
 
 const storage = new Map();
 globalThis.localStorage = {
@@ -34,15 +35,37 @@ test('Stückzahl, Gesamtgewicht und Zeiten beachten Grenzen und optionale Werte'
   for (const value of ['-1', '1.5', '2147483648']) assert.throws(() => optionalInteger(value));
 });
 
-test('Offline-Kopie speichert beide Listen, verwirft alte Versionen und wird beim Trennen entfernt', () => {
+test('Orte erlauben kein, ein zugehöriges, aber kein fremdes Fach', () => {
+  const locations = [{ id: 'kitchen', name: 'Kühlschrank' }, { id: 'cellar', name: 'Keller' }];
+  const compartments = [{ id: 'k1', location_id: 'kitchen', name: 'Fach 1' },
+    { id: 'c1', location_id: 'cellar', name: 'Fach 1' }];
+  assert.deepEqual(locationSelection({ location_id: 'kitchen', compartment_id: '' }, locations, compartments),
+    { location_id: 'kitchen', compartment_id: null });
+  const selected = locationSelection({ location_id: 'cellar', compartment_id: 'c1' }, locations, compartments);
+  assert.equal(locationLabel(selected, locations, compartments), 'Keller · Fach 1');
+  assert.equal(locationLabel({ location_id: 'kitchen', compartment_id: null }, locations, compartments), 'Kühlschrank');
+  for (const fields of [
+    { location_id: '', compartment_id: '' },
+    { location_id: 'free text', compartment_id: '' },
+    { location_id: 'kitchen', compartment_id: 'c1' },
+    { location_id: 'kitchen', compartment_id: 'deleted' },
+  ]) assert.throws(() => locationSelection(fields, locations, compartments));
+});
+
+test('Offline-Kopie speichert Produkte, Bestand und Ortsnamen und verwirft alte Versionen', () => {
   saveConnection({ inventoryId: '11111111-1111-4111-8111-111111111111', deviceId: 'd', deviceToken: 't' });
   storage.set('eisfach.inventory', JSON.stringify({
-    inventoryId: '11111111-1111-4111-8111-111111111111', items: [{ quantity: 3 }],
+    version: 2, inventoryId: '11111111-1111-4111-8111-111111111111',
+    items: [{ id: 'a' }], stockEntries: [{ location: 'Legacy free text' }],
   }));
   assert.equal(loadSnapshot(), null);
-  saveSnapshot([{ id: 'a' }], [{ item_id: 'a', quantity: 3 }]);
+  const locations = [{ id: 'cellar', name: 'Keller' }];
+  const compartments = [{ id: 'c1', location_id: 'cellar', name: 'Fach 1' }];
+  saveSnapshot([{ id: 'a' }], [{ item_id: 'a', quantity: 3 }], locations, compartments);
   assert.deepEqual(loadSnapshot().items, [{ id: 'a' }]);
   assert.deepEqual(loadSnapshot().stockEntries, [{ item_id: 'a', quantity: 3 }]);
+  assert.deepEqual(loadSnapshot().locations, locations);
+  assert.deepEqual(loadSnapshot().compartments, compartments);
   clearConnection();
   assert.equal(loadSnapshot(), null);
   assert.equal(storage.has('eisfach.inventory'), false);

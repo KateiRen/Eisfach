@@ -16,10 +16,36 @@
     <h1>Gefrierschrank</h1>
     <p id="status" role="status"></p>
     <section class="card">
-      <h2>Gefrierschrank-Einstellungen</h2>
-      <p>Eine eigene Gefrierschrankverwaltung ist noch nicht verfügbar. Lagerorte werden weiterhin direkt an den Bestandspositionen gepflegt.</p>
-      <a class="button" href="./app.html#stock">Zum Bestand</a>
+      <h2>Orte und Fächer</h2>
+      <p>Lege Orte wie „Kühlschrank“ oder „Keller“ an und ergänze bei Bedarf Fächer. Im Bestand ist jeder Ort auch ohne Fach auswählbar.</p>
+      <button id="add-location" type="button" disabled>Ort anlegen</button>
     </section>
+    <div id="storage-locations" class="grid"></div>
+    <dialog id="location-dialog">
+      <form id="location-form">
+        <h2 id="location-title">Ort anlegen</h2>
+        <label>Name<input name="name" required maxlength="200"></label>
+        <p id="location-status" role="status"></p>
+        <div class="actions">
+          <button type="submit">Speichern</button>
+          <button id="cancel-location" type="button" class="secondary">Abbrechen</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="delete-location-dialog">
+      <form id="delete-location-form">
+        <h2 id="delete-location-title">Ort löschen</h2>
+        <p id="delete-location-info"></p>
+        <label>Ersatzort<select name="location_id"></select></label>
+        <label>Ersatzfach (optional)<select name="compartment_id"><option value="">Ohne Fach</option></select></label>
+        <p>Vorhandene Bestandspositionen werden unverändert zum Ersatzort verschoben. Beim Löschen eines Ortes werden auch seine Fächer entfernt. Es wird kein Bestand gelöscht.</p>
+        <p id="delete-location-status" role="status"></p>
+        <div class="actions">
+          <button type="submit" class="danger">Umlagern und löschen</button>
+          <button id="cancel-delete-location" type="button" class="secondary">Abbrechen</button>
+        </div>
+      </form>
+    </dialog>
   </main>
 </body>
 </html>

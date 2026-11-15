@@ -13,7 +13,7 @@ Geräteprüfung, Bildspeicher und serverseitige Funktionen laufen ausschließlic
 ├── setup.html                 Neues Inventar / Gerät verbinden
 ├── app.html                   Inventar
 ├── devices.html               Geräteverwaltung
-├── freezer.html               Platzhalter für Gefrierschrank-Einstellungen
+├── freezer.html               Orte und Fächer verwalten
 ├── css/app.css                Mobile-First-Layout
 ├── js/
 │   ├── config.js              Öffentliche Supabase-Konfiguration
@@ -78,7 +78,8 @@ Geräteprüfung, Bildspeicher und serverseitige Funktionen laufen ausschließlic
 ### Daten und Zugriffsmodell
 
 Das Schema enthält `inventories`, `join_tokens`, `device_registrations`, `items`,
-`stock_entries`, `item_images` und `audit_log` sowie eine interne Tabelle für Registrierungslimits.
+`stock_entries`, `storage_locations`, `storage_compartments`, `item_images` und
+`audit_log` sowie eine interne Tabelle für Registrierungslimits.
 Anstelle von Klartextfeldern `token` und `device_token` werden absichtlich
 `token_hash` und `device_token_hash` gespeichert. IDs sind UUIDs; Zeitstempel werden serverseitig geführt.
 Produkte haben einen stabilen QR-Code. Produktkatalog und tatsächlicher Bestand
@@ -90,7 +91,10 @@ sind getrennt:
 | `items.preparation_minutes` | Zubereitungszeit in ganzen Minuten; leer (`NULL`) bedeutet unbekannt, 0 bedeutet keine Zubereitung |
 | `items.thawing_minutes` | Optionale Auftauzeit in ganzen Minuten; leer (`NULL`) bedeutet unbekannt, 0 bedeutet kein Auftauen |
 | `stock_entries.item_id` | Zugehöriges Produkt; ein Produkt kann beliebig viele Bestandspositionen haben |
-| `stock_entries.location` | Freier Lagerort, beispielsweise „Kellertruhe · Fach 2“ oder „Küche · Schublade 1“ |
+| `storage_locations` | Definierte Orte je Inventar, beispielsweise „Kühlschrank“ oder „Keller“ |
+| `storage_compartments` | Benannte Fächer eines Ortes, beispielsweise „Fach 1“ |
+| `stock_entries.location_id` | Verpflichtender Verweis auf einen definierten Ort desselben Inventars |
+| `stock_entries.compartment_id` | Optionales Fach des gewählten Ortes; `NULL` bedeutet „Ohne Fach“ |
 | `stock_entries.quantity` | Nichtnegative ganzzahlige Stückzahl dieser Position |
 | `stock_entries.weight_grams` | Gesamtgewicht dieser Position in Gramm mit bis zu drei Nachkommastellen; leer (`NULL`) bedeutet unbekannt |
 
@@ -120,7 +124,8 @@ ausführen. Sie ist ausschließlich für neue Projekte bestimmt.
    im Supabase **SQL Editor einmalig** ausführen. Die Datei enthält eine Transaktion:
    Bei einem Fehler wird keine Teilmigration übernommen; gegebenenfalls `ROLLBACK;`
    ausführen, bevor der Fehler behoben und die Migration erneut gestartet wird.
-3. Direkt anschließend die zugehörige neue App-Version auf GitHub Pages veröffentlichen.
+3. Anschließend die unten beschriebene Ortsmigration ausführen und die zugehörige
+   neue App-Version auf GitHub Pages veröffentlichen.
    Alte App-Versionen können nach der Migration nicht mehr Mengen und Lagerorte
    in `items` schreiben. Alle App-Tabs schließen und neu öffnen, damit der neue
    Service Worker aktiviert wird. Falls noch die alte Oberfläche erscheint,
@@ -138,6 +143,23 @@ Altdaten führen zu einem Fehler statt einer stillen Kürzung.
 Die Migration verändert weder Gerätezugänge noch die Rechte von
 `setup_inventory`: Eine zuvor per `REVOKE` gesperrte Inventaranlage bleibt gesperrt.
 Die vorhandenen Edge Functions müssen für diese Umstellung nicht neu veröffentlicht werden.
+
+#### Definierte Orte und Fächer
+
+Wenn Produktkatalog und `stock_entries` bereits vorhanden sind, nur noch
+[`supabase/migrations/202611150002_storage_locations.sql`](./supabase/migrations/202611150002_storage_locations.sql)
+**einmalig** im Supabase SQL Editor ausführen. Nicht die erste Migration wiederholen.
+Vorher sichern und Schreibzugriffe pausieren; danach sofort das passende Frontend
+veröffentlichen und alle App-Tabs schließen und neu öffnen.
+
+Die transaktionale Migration übernimmt jeden bisherigen nichtleeren Lagerortnamen
+unverändert als Ort ohne Fach pro Inventar. Leere/Whitespace-Angaben werden dem
+definierten Ort „Ohne Ortsangabe“ zugeordnet. Mengen, Gewichte, Produktbezüge und
+Bestands-IDs bleiben erhalten. Die Freitextspalte `stock_entries.location` wird
+durch Fremdschlüssel ersetzt; alte App-Versionen können danach keinen Bestand mehr
+anlegen. Die alte Offline-Kopie wird wegen des geänderten Formats verworfen;
+nach der Umstellung einmal online laden. Geräteverbindungen bleiben erhalten.
+Bei Fehlern gegebenenfalls `ROLLBACK;` ausführen; keine Teilmigration übernehmen.
 
 Der Browser speichert ausschließlich die dauerhafte Geräteverbindung als
 
@@ -242,9 +264,20 @@ Die SQL- und Edge-Quelldateien dürfen öffentlich sein, enthalten aber keine Se
 
 Das gemeinsame **Menü** bietet **Bestand**, **Produktkatalog** und **Einstellungen**.
 Unter **Einstellungen → Geräte** liegt die bisherige Geräteverwaltung.
-**Einstellungen → Gefrierschrank** öffnet vorerst eine Hinweisseite; eine eigene
-Gefrierschrankverwaltung ist noch nicht implementiert. Lagerorte bleiben freie
-Angaben an den Bestandspositionen. Bestand und Produktkatalog sind direkt über
+**Einstellungen → Gefrierschrank** zeigt die definierten Orte und ihre optionalen
+Fächer. Beide lassen sich anlegen, umbenennen und löschen. Beim Löschen kann ein
+Ersatzort mit optionalem Fach gewählt werden; bei vorhandenen Bestandspositionen
+ist er verpflichtend. Beim Löschen eines Fachs kann auch dessen übergeordneter Ort
+ohne Fach als Ersatz dienen. Die Umlagerung aller betroffenen Positionen und das
+Löschen erfolgen in einer Datenbanktransaktion, ohne Mengen oder Gewichte zu ändern.
+Belegte Orte/Fächer können nicht ohne Ersatz gelöscht werden. Beim Umbenennen
+bleiben Zuordnungen über stabile IDs erhalten.
+
+Die Bestandsverwaltung bietet ausschließlich Dropdowns für definierte Orte und
+zugehörige Fächer; **Ohne Fach** ist bei jedem Ort möglich. Zuerst mindestens einen
+Ort anlegen. Die Ortsverwaltung benötigt Internet; Bestände einschließlich Orts-
+und Fachnamen sind nach erfolgreichem Laden weiterhin offline lesbar.
+Bestand und Produktkatalog sind direkt über
 `app.html#stock` bzw. `app.html#catalog` erreichbar; die Browsernavigation
 wechselt ebenfalls zwischen diesen Ansichten.
 
@@ -304,6 +337,7 @@ ausführen, beispielsweise:
 
 ```sh
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/product_stock.sql
+psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/storage_locations.sql
 ```
 
 Der Check legt seine Testdaten innerhalb einer Transaktion an und verwirft sie
@@ -313,6 +347,11 @@ bisherigen Daten prüfen.
 - [ ] Inventar anlegen; Artikel mit Bild anlegen, suchen, bearbeiten und löschen.
 - [ ] Ein Produkt an zwei Lagerorten einlagern; Stückzahl und Gesamtgewicht
       unabhängig bearbeiten. Eine Position entfernen: das andere Lager bleibt erhalten.
+- [ ] Orte und Fächer anlegen und umbenennen; Bestand mit und ohne Fach anlegen.
+      Fach in seinen übergeordneten Ort umlagern und löschen; ganzen Ort mit
+      Ersatzort/-fach löschen. Bestand, Mengen und Gewichte müssen erhalten bleiben.
+- [ ] Ortsmigration mit freien und leeren Lagerorten prüfen; ursprüngliche Namen
+      bleiben erhalten, leere Orte werden „Ohne Ortsangabe“. Alte Clients ablehnen.
 - [ ] Alle Positionen entfernen: Produkt, Zeiten, Bilder und QR bleiben im Katalog.
       Dasselbe Produkt ohne Neuerfassung wieder einlagern.
 - [ ] Migration mit positiven und Null-Mengen prüfen; bestehende Bilder, Geräte

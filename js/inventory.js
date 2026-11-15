@@ -3,9 +3,12 @@ import { loadConnection, saveSnapshot, loadSnapshot } from './auth.js';
 import { uploadImage, imageURL, removeImage } from './storage.js';
 import { renderQR, scanQR } from './scanner.js';
 import { element, action, status } from './app.js';
+import { locationLabel, populateCompartments, locationSelection } from './locations.js';
 
 let items = [];
 let stockEntries = [];
+let locations = [];
+let compartments = [];
 let offline = false;
 let currentView = 'stock';
 let detailVersion = 0;
@@ -44,20 +47,26 @@ export function stockValues(fields) {
 
 async function refresh() {
   try {
-    const [loadedItems, loadedStock] = await Promise.all([
+    const [loadedItems, loadedStock, loadedLocations, loadedCompartments] = await Promise.all([
       list('items', '?select=*&order=name.asc,id.asc'),
       list('stock_entries', '?select=*&order=created_at.asc,id.asc'),
+      list('storage_locations', '?select=*&order=name.asc,id.asc'),
+      list('storage_compartments', '?select=*&order=name.asc,id.asc'),
     ]);
     items = loadedItems;
     stockEntries = loadedStock;
+    locations = loadedLocations;
+    compartments = loadedCompartments;
     offline = false;
-    saveSnapshot(items, stockEntries);
+    saveSnapshot(items, stockEntries, locations, compartments);
     status('');
   } catch (error) {
     const snapshot = loadSnapshot();
     if (!snapshot) throw error;
     items = snapshot.items;
     stockEntries = snapshot.stockEntries;
+    locations = snapshot.locations;
+    compartments = snapshot.compartments;
     offline = true;
     status(`Server nicht erreichbar: ${error.message} Offline-Kopie vom ${new Date(snapshot.savedAt).toLocaleString('de-DE')}. Nur Lesen möglich.`);
   }
@@ -67,8 +76,6 @@ async function refresh() {
     ...categories.map((category) => new Option(category, category)));
   document.querySelector('#category').value = categories.includes(selected) ? selected : '';
   document.querySelector('#categories').replaceChildren(...categories.map((category) => new Option(category)));
-  const locations = [...new Set(stockEntries.map((entry) => entry.location).filter(Boolean))].sort();
-  document.querySelector('#locations').replaceChildren(...locations.map((location) => new Option(location)));
   document.querySelector('#add-item').disabled = offline;
   document.querySelector('#add-stock').disabled = offline || !items.length;
   render();
@@ -81,10 +88,11 @@ function render() {
     [item.name, item.description, item.category, item.notes, item.qr_code, ...locations]
       .some((value) => String(value || '').toLocaleLowerCase('de').includes(search));
   const itemById = new Map(items.map((item) => [item.id, item]));
+  const label = (entry) => locationLabel(entry, locations, compartments);
   const visible = currentView === 'catalog'
-    ? items.filter((item) => matches(item, stockEntries.filter((entry) => entry.item_id === item.id).map((entry) => entry.location)))
+    ? items.filter((item) => matches(item, stockEntries.filter((entry) => entry.item_id === item.id).map(label)))
     : stockEntries.filter((entry) => hasStock(entry) && itemById.has(entry.item_id) &&
-        matches(itemById.get(entry.item_id), [entry.location]));
+        matches(itemById.get(entry.item_id), [label(entry)]));
   document.querySelector('#empty').hidden = visible.length > 0;
   document.querySelector('#empty').textContent = currentView === 'catalog'
     ? 'Keine passenden Produkte vorhanden.' : 'Keine passenden Bestandspositionen vorhanden.';
@@ -93,7 +101,7 @@ function render() {
     const item = entry ? itemById.get(entry.item_id) : record;
     const card = element('article', undefined, 'card');
     card.append(element('h2', item.name), element('p', item.description || ''),
-      element('p', [item.category, entry?.location].filter(Boolean).join(' · '), 'muted'));
+      element('p', [item.category, entry ? label(entry) : ''].filter(Boolean).join(' · '), 'muted'));
     if (item.notes) card.append(element('p', item.notes));
     const times = [
       item.preparation_minutes != null ? `Zubereitung: ${item.preparation_minutes} Min.` : '',
@@ -201,11 +209,16 @@ function editStock(entry, itemId) {
   stockForm().elements.item_id.replaceChildren(...items.map((item) => new Option(item.name, item.id)));
   stockForm().elements.id.value = entry?.id ?? '';
   stockForm().elements.item_id.value = entry?.item_id ?? itemId ?? items[0]?.id ?? '';
-  stockForm().elements.location.value = entry?.location ?? '';
+  stockForm().elements.location_id.replaceChildren(new Option('Bitte Ort auswählen', ''),
+    ...locations.map((location) => new Option(location.name, location.id)));
+  stockForm().elements.location_id.value = entry?.location_id ?? '';
+  populateCompartments(stockForm().elements.compartment_id, compartments,
+    stockForm().elements.location_id.value, entry?.compartment_id ?? '');
   stockForm().elements.quantity.value = entry?.quantity ?? 1;
   stockForm().elements.weight_grams.value = entry?.weight_grams ?? '';
   document.querySelector('#stock-title').textContent = entry ? 'Bestandsposition bearbeiten' : 'Bestand hinzufügen';
-  document.querySelector('#stock-status').textContent = '';
+  document.querySelector('#stock-status').textContent = locations.length
+    ? '' : 'Bitte zuerst unter Einstellungen → Gefrierschrank einen Ort anlegen.';
   stockDialog().showModal();
 }
 
@@ -220,7 +233,8 @@ async function saveStock(event) {
     if (offline) throw new Error('Offline sind keine Änderungen möglich.');
     const fields = Object.fromEntries(new FormData(stockForm()));
     if (!items.some((item) => item.id === fields.item_id)) throw new Error('Bitte ein Produkt auswählen.');
-    const body = { item_id: fields.item_id, location: fields.location.trim(), ...stockValues(fields) };
+    const body = { item_id: fields.item_id,
+      ...locationSelection(fields, locations, compartments), ...stockValues(fields) };
     const creating = !fields.id;
     if (creating) body.inventory_id = loadConnection().inventoryId;
     const filter = creating ? '' : `?id=eq.${encodeURIComponent(fields.id)}&updated_at=eq.${encodeURIComponent(stockEditingVersion)}`;
@@ -319,6 +333,10 @@ export async function initInventory() {
   });
   form().addEventListener('submit', saveItem);
   stockForm().addEventListener('submit', saveStock);
+  stockForm().elements.location_id.addEventListener('change', () => {
+    populateCompartments(stockForm().elements.compartment_id, compartments,
+      stockForm().elements.location_id.value);
+  });
   document.querySelector('#scan-item').addEventListener('click', async () => {
     try {
       const code = await scanQR();

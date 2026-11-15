@@ -49,8 +49,11 @@
         <h2 id="stock-title">Bestand hinzufügen</h2>
         <input name="id" type="hidden">
         <label>Produkt<select name="item_id" required></select></label>
-        <label>Lagerort<input name="location" maxlength="200" list="locations" placeholder="Truhe · Fach 2"></label>
-        <datalist id="locations"></datalist>
+        <div class="columns">
+          <label>Ort<select name="location_id" required></select></label>
+          <label>Fach (optional)<select name="compartment_id"><option value="">Ohne Fach</option></select></label>
+        </div>
+        <p>Orte und Fächer unter <a href="./freezer.html">Einstellungen → Gefrierschrank</a> verwalten.</p>
         <div class="columns">
           <label>Stückzahl<input name="quantity" type="number" min="0" max="2147483647" step="1" required value="1"></label>
           <label>Gesamtgewicht (g, optional)<input name="weight_grams" type="number" min="0" max="999999999.999" step="0.001"></label>
