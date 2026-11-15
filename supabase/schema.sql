@@ -43,15 +43,34 @@ create table public.items (
   inventory_id uuid not null references public.inventories(id) on delete cascade,
   name text not null check (char_length(btrim(name)) between 1 and 200),
   description text not null default '',
-  quantity integer not null default 1 check (quantity >= 0),
   category text not null default '',
-  location text not null default '',
+  preparation_minutes integer check (preparation_minutes >= 0),
+  thawing_minutes integer check (thawing_minutes >= 0),
   qr_code text,
   notes text not null default '',
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now(),
+  unique (inventory_id, id)
 );
 create index items_inventory_idx on public.items(inventory_id);
+
+create table public.stock_entries (
+  id uuid primary key default gen_random_uuid(),
+  inventory_id uuid not null references public.inventories(id) on delete cascade,
+  item_id uuid not null,
+  location text not null default '' check (char_length(location) <= 200),
+  quantity integer not null default 1 check (quantity >= 0),
+  -- Total weight of this position, not weight per piece; NULL means unknown.
+  weight_grams numeric(12,3) check (
+    weight_grams >= 0 and weight_grams < 1000000000
+  ),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  foreign key (inventory_id, item_id)
+    references public.items(inventory_id, id) on delete cascade
+);
+create index stock_entries_item_idx on public.stock_entries(item_id);
+create index stock_entries_inventory_idx on public.stock_entries(inventory_id);
 
 create table public.item_images (
   id uuid primary key default gen_random_uuid(),
@@ -83,22 +102,23 @@ alter table public.inventories enable row level security;
 alter table public.join_tokens enable row level security;
 alter table public.device_registrations enable row level security;
 alter table public.items enable row level security;
+alter table public.stock_entries enable row level security;
 alter table public.item_images enable row level security;
 alter table public.audit_log enable row level security;
 alter table public.registration_rate_limits enable row level security;
 
 -- Never expose the credential hash columns, even through SELECT * or RETURNING *.
 revoke all on public.inventories, public.join_tokens, public.device_registrations,
-  public.items, public.item_images, public.audit_log, public.registration_rate_limits
+  public.items, public.stock_entries, public.item_images, public.audit_log, public.registration_rate_limits
   from public, anon, authenticated;
 grant select on public.inventories, public.audit_log to anon, authenticated;
-grant select, insert, update, delete on public.items, public.item_images to anon, authenticated;
+grant select, insert, update, delete on public.items, public.stock_entries, public.item_images to anon, authenticated;
 grant select (id, inventory_id, device_id, device_name, revoked, created_at, last_seen_at)
   on public.device_registrations to anon, authenticated;
 grant update (device_name) on public.device_registrations to anon, authenticated;
 grant delete on public.device_registrations to anon, authenticated;
 grant all on public.inventories, public.join_tokens, public.device_registrations,
-  public.items, public.item_images, public.audit_log, public.registration_rate_limits
+  public.items, public.stock_entries, public.item_images, public.audit_log, public.registration_rate_limits
   to service_role;
 
 create function public.current_inventory_id()
@@ -151,6 +171,15 @@ create policy items_update on public.items for update to anon, authenticated
   using (inventory_id = (select public.current_inventory_id()))
   with check (inventory_id = (select public.current_inventory_id()));
 create policy items_delete on public.items for delete to anon, authenticated
+  using (inventory_id = (select public.current_inventory_id()));
+create policy stock_read on public.stock_entries for select to anon, authenticated
+  using (inventory_id = (select public.current_inventory_id()));
+create policy stock_insert on public.stock_entries for insert to anon, authenticated
+  with check (inventory_id = (select public.current_inventory_id()));
+create policy stock_update on public.stock_entries for update to anon, authenticated
+  using (inventory_id = (select public.current_inventory_id()))
+  with check (inventory_id = (select public.current_inventory_id()));
+create policy stock_delete on public.stock_entries for delete to anon, authenticated
   using (inventory_id = (select public.current_inventory_id()));
 create policy audit_read on public.audit_log for select to anon, authenticated
   using (inventory_id = (select public.current_inventory_id()));
@@ -245,6 +274,35 @@ $$;
 revoke all on function public.set_item_updated_at() from public, anon, authenticated;
 create trigger items_updated_at before update on public.items
   for each row execute function public.set_item_updated_at();
+create trigger stock_updated_at before update on public.stock_entries
+  for each row execute function public.set_item_updated_at();
+
+create function public.audit_stock_change()
+returns trigger
+language plpgsql security definer
+set search_path = ''
+as $$
+declare
+  inventory uuid;
+  product uuid;
+begin
+  if tg_op = 'DELETE' then
+    inventory := old.inventory_id;
+    product := old.item_id;
+  else
+    inventory := new.inventory_id;
+    product := new.item_id;
+  end if;
+  if exists (select 1 from public.inventories where id = inventory) then
+    insert into public.audit_log(inventory_id, action, item_id)
+    values (inventory, 'stock.' || lower(tg_op), product);
+  end if;
+  return null;
+end;
+$$;
+revoke all on function public.audit_stock_change() from public, anon, authenticated;
+create trigger stock_audit after insert or update or delete on public.stock_entries
+  for each row execute function public.audit_stock_change();
 
 create function public.audit_change()
 returns trigger

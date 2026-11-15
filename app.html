@@ -15,31 +15,52 @@
   <main>
     <h1 id="inventory-name">Dein Inventar</h1>
     <p id="status" role="status"></p>
+    <div class="view-switch" role="group" aria-label="Ansicht">
+      <button id="view-stock" type="button" aria-pressed="true">Bestand</button>
+      <button id="view-catalog" type="button" class="secondary" aria-pressed="false">Produktkatalog</button>
+    </div>
     <div class="toolbar">
       <label>Suche<input id="search" type="search" placeholder="Name, Notizen, Lagerort …"></label>
       <label>Kategorie<select id="category"><option value="">Alle Kategorien</option></select></label>
       <button id="scan-item" class="secondary" type="button">QR scannen</button>
-      <button id="add-item" type="button">Artikel anlegen</button>
+      <button id="add-stock" type="button">Bestand hinzufügen</button>
+      <button id="add-item" type="button">Produkt anlegen</button>
     </div>
-    <p id="empty" hidden>Noch keine passenden Artikel vorhanden.</p>
+    <p id="empty" hidden></p>
     <div id="items" class="grid"></div>
     <dialog id="item-dialog">
       <form id="item-form">
-        <h2 id="editor-title">Artikel anlegen</h2>
+        <h2 id="editor-title">Produkt anlegen</h2>
         <input name="id" type="hidden">
         <label>Name<input name="name" required maxlength="200"></label>
         <label>Beschreibung<textarea name="description" maxlength="2000"></textarea></label>
-        <div class="columns">
-          <label>Menge<input name="quantity" type="number" min="0" max="2147483647" step="1" required value="1"></label>
-          <label>Kategorie<input name="category" maxlength="100" list="categories"></label>
-        </div>
+        <label>Kategorie<input name="category" maxlength="100" list="categories"></label>
         <datalist id="categories"></datalist>
-        <label>Lagerort<input name="location" maxlength="200" placeholder="Truhe · Fach 2"></label>
+        <div class="columns">
+          <label>Zubereitungszeit (Minuten)<input name="preparation_minutes" type="number" min="0" max="2147483647" step="1"></label>
+          <label>Auftauzeit (Minuten, optional)<input name="thawing_minutes" type="number" min="0" max="2147483647" step="1"></label>
+        </div>
         <label>Notizen<textarea name="notes" maxlength="4000"></textarea></label>
         <label>Bilder hinzufügen<input name="images" type="file" accept="image/*" multiple></label>
         <p>Bilder werden auf maximal 1600 Pixel verkleinert und als WebP gespeichert.</p>
         <p id="editor-status" role="status"></p>
         <div class="actions"><button type="submit">Speichern</button><button id="cancel-item" type="button" class="secondary">Schließen</button></div>
+      </form>
+    </dialog>
+    <dialog id="stock-dialog">
+      <form id="stock-form">
+        <h2 id="stock-title">Bestand hinzufügen</h2>
+        <input name="id" type="hidden">
+        <label>Produkt<select name="item_id" required></select></label>
+        <label>Lagerort<input name="location" maxlength="200" list="locations" placeholder="Truhe · Fach 2"></label>
+        <datalist id="locations"></datalist>
+        <div class="columns">
+          <label>Stückzahl<input name="quantity" type="number" min="0" max="2147483647" step="1" required value="1"></label>
+          <label>Gesamtgewicht (g, optional)<input name="weight_grams" type="number" min="0" max="999999999.999" step="0.001"></label>
+        </div>
+        <p>Das Gewicht gilt für die gesamte Position und wird bei Änderungen der Stückzahl nicht automatisch angepasst. Positionen ohne Stückzahl und Gewicht erscheinen nicht im Bestand.</p>
+        <p id="stock-status" role="status"></p>
+        <div class="actions"><button type="submit">Speichern</button><button id="cancel-stock" type="button" class="secondary">Schließen</button></div>
       </form>
     </dialog>
     <dialog id="detail-dialog">
