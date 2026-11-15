@@ -1,8 +1,9 @@
 import { rest, list } from './supabase.js';
 import { loadConnection, saveSnapshot, loadSnapshot } from './auth.js';
-import { uploadImage, imageURL, removeImage } from './storage.js';
+import { uploadImage, imageURL, removeImage, loadImageURL } from './storage.js';
 import { element, action, status } from './app.js';
 import { locationLabel, populateCompartments, locationSelection } from './locations.js';
+import { loadSorting, compareOrder, orderRecords, orderStockPositions } from './ordering.js';
 
 let items = [];
 let stockEntries = [];
@@ -11,6 +12,7 @@ let compartments = [];
 let offline = false;
 let currentView = 'stock';
 let selectedCategory = '';
+let sorting = null;
 let renderVersion = 0;
 let previewPaths = null;
 const previewURLs = new Map();
@@ -37,7 +39,7 @@ export function matchesProduct(item, search, category, locationNames = []) {
       .some((value) => String(value || '').toLocaleLowerCase('de').includes(query));
 }
 
-export function groupCatalog(products, getProduct = (product) => product) {
+export function groupCatalog(products, getProduct = (product) => product, categoryOrder = []) {
   const groups = new Map();
   for (const product of products) {
     const category = getProduct(product).category || '';
@@ -45,7 +47,7 @@ export function groupCatalog(products, getProduct = (product) => product) {
     groups.get(category).push(product);
   }
   return [...groups].sort(([a], [b]) =>
-    a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, 'de'))
+    compareOrder(a, b, categoryOrder) || (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, 'de')))
     .map(([category, entries]) => ({
       category,
       items: entries.sort((a, b) => getProduct(a).name.localeCompare(getProduct(b).name, 'de')),
@@ -73,6 +75,14 @@ export function productStockLabel(itemId, entries) {
   const quantity = active.reduce((sum, entry) => sum + Number(entry.quantity), 0);
   const positions = `${active.length} Position${active.length === 1 ? '' : 'en'}`;
   return `Bestand: ${quantity > 0 ? `${quantity} Stück · ` : ''}${positions}`;
+}
+
+export function productSearchURL(productNumber, name) {
+  const query = [productNumber.trim(), name.trim()].filter(Boolean).join(' ');
+  if (!query) throw new Error('Bitte für die Google Suche einen Produktnamen oder eine Produktnummer eingeben.');
+  const url = new URL('https://www.google.com/search');
+  url.searchParams.set('q', query);
+  return url.href;
 }
 
 export function optionalInteger(value) {
@@ -107,18 +117,20 @@ async function refresh() {
   loading.hidden = false;
   document.querySelector('#empty').hidden = true;
   try {
-    const [loadedItems, loadedStock, loadedLocations, loadedCompartments] = await Promise.all([
+    const [loadedItems, loadedStock, loadedLocations, loadedCompartments, loadedSorting] = await Promise.all([
       list('items', '?select=*&order=name.asc,id.asc'),
       list('stock_entries', '?select=*&order=created_at.asc,id.asc'),
       list('storage_locations', '?select=*&order=name.asc,id.asc'),
       list('storage_compartments', '?select=*&order=name.asc,id.asc'),
+      loadSorting(),
     ]);
     items = loadedItems;
     stockEntries = loadedStock;
-    locations = loadedLocations;
-    compartments = loadedCompartments;
+    sorting = loadedSorting;
+    locations = orderRecords(loadedLocations, sorting?.locations);
+    compartments = orderRecords(loadedCompartments, sorting?.compartments);
     offline = false;
-    saveSnapshot(items, stockEntries, locations, compartments);
+    saveSnapshot(items, stockEntries, locations, compartments, sorting);
     status('');
   } catch (error) {
     const snapshot = loadSnapshot();
@@ -127,12 +139,14 @@ async function refresh() {
     stockEntries = snapshot.stockEntries;
     locations = snapshot.locations;
     compartments = snapshot.compartments;
+    sorting = snapshot.sorting ?? null;
     offline = true;
     status(`Server nicht erreichbar: ${error.message} Offline-Kopie vom ${new Date(snapshot.savedAt).toLocaleString('de-DE')}. Nur Lesen möglich.`);
   } finally {
     loading.hidden = true;
   }
-  const categories = [...new Set(items.map((item) => item.category).filter(Boolean))].sort();
+  const categories = groupCatalog(items, (item) => item, sorting?.categories)
+    .map((group) => group.category).filter(Boolean);
   renderCategoryFilters(categories);
   document.querySelector('#categories').replaceChildren(...categories.map((category) => new Option(category)));
   document.querySelector('#add-item').disabled = offline;
@@ -174,8 +188,8 @@ function render() {
         (!onlyWithStock || stockEntries.some((entry) => entry.item_id === item.id && hasStock(entry))) &&
         matchesProduct(item, search, selectedCategory,
           stockEntries.filter((entry) => entry.item_id === item.id).map(label)))
-    : stockEntries.filter((entry) => hasStock(entry) && itemById.has(entry.item_id) &&
-        matchesProduct(itemById.get(entry.item_id), search, selectedCategory, [label(entry)]));
+    : orderStockPositions(stockEntries.filter((entry) => hasStock(entry) && itemById.has(entry.item_id) &&
+        matchesProduct(itemById.get(entry.item_id), search, selectedCategory, [label(entry)])), locations, compartments);
   document.querySelector('#empty').hidden = !document.querySelector('#loading').hidden || visible.length > 0;
   document.querySelector('#empty').textContent = currentView === 'catalog'
     ? 'Keine passenden Produkte vorhanden.' : 'Keine passenden Bestandspositionen vorhanden.';
@@ -229,7 +243,7 @@ function render() {
     return card;
   };
   const content = groupCatalog(visible, (record) =>
-    currentView === 'catalog' ? record : itemById.get(record.item_id)).map((group, index) => {
+    currentView === 'catalog' ? record : itemById.get(record.item_id), sorting?.categories).map((group, index) => {
       const section = element('section', undefined, 'category-group');
       const productCount = new Set(group.items.map((record) =>
         currentView === 'catalog' ? record.id : record.item_id)).size;
@@ -326,6 +340,7 @@ async function editItem(item) {
   }
   document.querySelector('#editor-title').textContent = item ? 'Produkt bearbeiten' : 'Produkt anlegen';
   document.querySelector('#editor-status').textContent = '';
+  updateGoogleSearch();
   updateEditorActions();
   const gallery = document.querySelector('#editor-images');
   gallery.replaceChildren();
@@ -339,8 +354,19 @@ async function editItem(item) {
   }
 }
 
+function updateGoogleSearch() {
+  const link = document.querySelector('#google-search');
+  const number = form().elements.product_number.value;
+  const name = form().elements.name.value;
+  const empty = !number.trim() && !name.trim();
+  link.setAttribute('aria-disabled', String(empty));
+  if (empty) link.removeAttribute('href');
+  else link.href = productSearchURL(number, name);
+}
+
 function updateEditorActions() {
   form().querySelector('[type=submit]').disabled = editorBusy || offline;
+  form().elements.image_url.readOnly = editorBusy || offline;
   document.querySelector('#cancel-item').disabled = editorBusy;
   const remove = document.querySelector('#delete-item');
   remove.hidden = !editingItem;
@@ -382,6 +408,7 @@ async function saveItem(event) {
     body.thawing_minutes = optionalInteger(fields.thawing_minutes);
     body.weight_grams = optionalWeight(fields.weight_grams);
     if (!body.name) throw new Error('Ein Name ist erforderlich.');
+    const urlImage = fields.image_url.trim() ? await loadImageURL(fields.image_url) : null;
     if (creating) {
       body.id = id;
       body.inventory_id = loadConnection().inventoryId;
@@ -404,6 +431,10 @@ async function saveItem(event) {
       await uploadImage(id, files[index], index);
     }
     form().elements.images.value = '';
+    if (urlImage) {
+      await uploadImage(id, urlImage, files.length);
+      form().elements.image_url.value = '';
+    }
     await refresh();
     if (stockDialog().open) {
       const product = items.find((item) => item.id === id);
@@ -445,7 +476,7 @@ function editStock(entry, itemId) {
   stockForm().elements.quantity.value = entry?.quantity ?? 1;
   document.querySelector('#stock-title').textContent = entry ? 'Bestandsposition bearbeiten' : 'Bestand hinzufügen';
   document.querySelector('#stock-status').textContent = locations.length
-    ? '' : 'Bitte zuerst unter Einstellungen → Gefrierschrank einen Ort anlegen.';
+    ? '' : 'Bitte zuerst unter Einstellungen → Orte und Fächer einen Ort anlegen.';
   updateStockActions();
   stockDialog().showModal();
 }
@@ -571,6 +602,17 @@ export async function initInventory() {
   document.querySelector('#only-with-stock').addEventListener('change', render);
   document.querySelector('#compact-view').addEventListener('change', render);
   document.querySelector('#add-item').addEventListener('click', () => editItem());
+  for (const name of ['product_number', 'name']) {
+    form().elements[name].addEventListener('input', updateGoogleSearch);
+  }
+  document.querySelector('#google-search').addEventListener('click', (event) => {
+    try {
+      event.currentTarget.href = productSearchURL(form().elements.product_number.value, form().elements.name.value);
+    } catch (error) {
+      event.preventDefault();
+      document.querySelector('#editor-status').textContent = error.message;
+    }
+  });
   stockForm().elements.product_number_search.addEventListener('input', () => populateStockProducts());
   stockForm().elements.item_id.addEventListener('change', updateStockProduct);
   stockForm().elements.quantity.addEventListener('input', updateStockActions);

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#126b73">
+  <title>Einstellungen · Sortierung · Eisfach</title>
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="./css/app.css">
+  <script type="module" src="./js/app.js"></script>
+</head>
+<body data-page="sorting">
+  <header><div class="brand"><a href="./app.html">❄ Eisfach</a><span id="inventory-name" class="inventory-name">Dein Inventar</span></div><nav aria-label="Hauptnavigation"></nav></header>
+  <main>
+    <h1>Einstellungen</h1>
+    <h2>Sortierung</h2>
+    <p id="status" role="status"></p>
+    <p>Verschiebe Kategorien, Orte und die Fächer je Ort mit „Nach oben“ und „Nach unten“. Nach dem Speichern gilt die Reihenfolge für alle Geräte dieses Inventars. Neue Einträge erscheinen dahinter alphabetisch.</p>
+    <form id="sorting-form">
+      <fieldset id="sorting-controls" disabled>
+        <legend>Anzeige-Reihenfolge</legend>
+        <section class="card">
+          <h2>Kategorien</h2>
+          <div id="sort-categories"></div>
+        </section>
+        <section class="card">
+          <h2>Orte</h2>
+          <div id="sort-locations"></div>
+        </section>
+        <section class="card">
+          <h2>Fächer je Ort</h2>
+          <div id="sort-compartments"></div>
+        </section>
+        <button type="submit">Speichern</button>
+      </fieldset>
+    </form>
+  </main>
+</body>
+</html>

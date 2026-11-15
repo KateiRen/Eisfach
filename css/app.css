@@ -29,6 +29,7 @@ button, .button { display: inline-block; border: 1px solid transparent; border-r
 .secondary { background: white; color: var(--accent-link); border-color: var(--accent-link); }
 .danger { background: #a92c36; color: white; }
 button:disabled { opacity: .55; cursor: wait; }
+.button[aria-disabled="true"] { opacity: .55; }
 button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid #d78500; outline-offset: 3px; }
 label { display: block; font-weight: 600; margin-bottom: .85rem; }
 input, textarea, select { display: block; width: 100%; padding: .75rem; margin-top: .35rem; border: 1px solid #8aafb2; border-radius: .4rem; font: inherit; background: white; color: #17343a; }
@@ -66,6 +67,10 @@ input[type="color"] { width: 100%; max-width: 12rem; height: 3rem; padding: .25r
 .stock-info p { margin: .25rem 0; }
 .stock-name { background: none; color: var(--accent-link); padding: 0; text-align: left; overflow-wrap: anywhere; }
 .stock-name:hover { text-decoration: underline; }
+#sorting-controls { border: 0; padding: 0; margin: 0; min-width: 0; }
+.sorting-list { padding-left: 1.5rem; }
+.sorting-row { padding: .4rem 0; overflow-wrap: anywhere; }
+.sorting-row .actions { margin-top: .25rem; }
 .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .muted { color: #49666c; }
 .quantity { font-weight: 700; font-size: 1.3rem; padding: 0 .5rem; }

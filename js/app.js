@@ -37,7 +37,8 @@ function initNavigation(page) {
     ['Bestand', './app.html#stock', 'stock'],
     ['Produktliste', './app.html#catalog', 'catalog'],
     ['Geräte', './devices.html', 'devices'],
-    ['Gefrierschrank', './freezer.html', 'freezer'],
+    ['Orte und Fächer', './freezer.html', 'freezer'],
+    ['Sortierung', './sorting.html', 'sorting'],
     ['Aussehen', './appearance.html', 'appearance'],
     ['Export/Import', './transfer.html', 'transfer'],
   ]) {
@@ -112,6 +113,7 @@ async function init() {
   if (page === 'inventory') await (await import('./inventory.js')).initInventory();
   if (page === 'devices') await (await import('./devices.js')).initDevices();
   if (page === 'freezer') await (await import('./freezer.js')).initFreezer();
+  if (page === 'sorting') await (await import('./sorting.js')).initSorting();
   if (page === 'transfer') (await import('./transfer.js')).initTransfer();
 }
 

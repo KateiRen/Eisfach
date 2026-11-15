@@ -2,6 +2,7 @@ import { rest, list } from './supabase.js';
 import { loadConnection } from './auth.js';
 import { element, action, status } from './app.js';
 import { locationSelection, populateCompartments } from './locations.js';
+import { loadSorting, orderRecords } from './ordering.js';
 
 let locations = [];
 let compartments = [];
@@ -21,8 +22,12 @@ async function refresh() {
     list('storage_locations', '?select=*&order=name.asc,id.asc'),
     list('storage_compartments', '?select=*&order=name.asc,id.asc'),
     list('stock_entries', '?select=id,location_id,compartment_id&order=id.asc'),
+    loadSorting(),
   ]);
-  [locations, compartments, stockEntries] = loaded;
+  const [loadedLocations, loadedCompartments, loadedStock, sorting] = loaded;
+  locations = orderRecords(loadedLocations, sorting?.locations);
+  compartments = orderRecords(loadedCompartments, sorting?.compartments);
+  stockEntries = loadedStock;
   available = true;
   document.querySelector('#add-location').disabled = false;
   status('');

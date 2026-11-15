@@ -28,11 +28,11 @@ export function clearConnection() {
   localStorage.removeItem(SNAPSHOT_KEY);
 }
 
-export function saveSnapshot(items, stockEntries, locations, compartments) {
+export function saveSnapshot(items, stockEntries, locations, compartments, sorting = null) {
   try {
     localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({
       version: 4, inventoryId: loadConnection()?.inventoryId,
-      savedAt: new Date().toISOString(), items, stockEntries, locations, compartments,
+      savedAt: new Date().toISOString(), items, stockEntries, locations, compartments, sorting,
     }));
   } catch { /* Offline-Kopie ist optional (z. B. bei vollem Browserspeicher). */ }
 }

@@ -5,10 +5,12 @@ globalThis.document = { querySelector: () => null };
 const {
   hasStock, matchesProduct, optionalInteger, optionalWeight, stockValues, groupCatalog, productPackInfo,
   productWeightLabel, filterByProductNumber,
-  productStockLabel, loadProductImages, loadStockPreview,
+  productStockLabel, productSearchURL, loadProductImages, loadStockPreview,
 } = await import('../js/inventory.js');
+const { loadImageURL, uploadImage } = await import('../js/storage.js');
 const { saveConnection, clearConnection, saveSnapshot, loadSnapshot } = await import('../js/auth.js');
 const { locationSelection, locationLabel } = await import('../js/locations.js');
+const { orderRecords, orderStockPositions, loadSorting, saveSorting } = await import('../js/ordering.js');
 
 const storage = new Map();
 globalThis.localStorage = {
@@ -74,6 +76,80 @@ test('Katalog bildet bei gefilterten und leeren Ergebnissen keine leeren Gruppen
   assert.deepEqual(groupCatalog([]), []);
 });
 
+test('Gespeicherte Kategorienreihenfolge gilt auch für Teilmengen und Ohne Kategorie', () => {
+  const products = [
+    { name: 'Zander', category: 'Fisch' },
+    { name: 'Brot', category: '' },
+    { name: 'Erbsen', category: 'Gemüse' },
+    { name: 'Apfel', category: 'Obst' },
+    { name: 'Lachs', category: 'Fisch' },
+  ];
+  const order = ['Gemüse', '', 'Fisch', 'Entfernt'];
+  const groups = groupCatalog(products, (product) => product, order);
+  assert.deepEqual(groups.map((group) => group.category), ['Gemüse', '', 'Fisch', 'Obst']);
+  assert.deepEqual(groups[2].items.map((product) => product.name), ['Lachs', 'Zander']);
+  assert.deepEqual(groupCatalog(products.filter((product) => product.category !== 'Gemüse'),
+    (product) => product, order).map((group) => group.category), ['', 'Fisch', 'Obst']);
+});
+
+test('Orte und Fächer folgen gespeicherten IDs; neue Einträge folgen alphabetisch', () => {
+  const records = [
+    { id: 'a', name: 'Keller' }, { id: 'b', name: 'Küche' },
+    { id: 'c', name: 'Abstellraum' }, { id: 'd', name: 'Garten' },
+  ];
+  assert.deepEqual(orderRecords(records, ['b', 'entfernt', 'a']).map((record) => record.id),
+    ['b', 'a', 'c', 'd']);
+  assert.deepEqual(orderRecords([{ id: 'a', name: 'Umbenannt' }, records[1]], ['b', 'a'])
+    .map((record) => record.id), ['b', 'a']);
+  assert.deepEqual(records.map((record) => record.id), ['a', 'b', 'c', 'd']);
+  assert.deepEqual(orderRecords(records).map((record) => record.id), ['c', 'd', 'a', 'b']);
+});
+
+test('Positionen eines Produkts folgen der Orts- und Fachreihenfolge, Ohne Fach zuerst', () => {
+  const entries = [
+    { id: 'a', location_id: 'keller', compartment_id: 'oben' },
+    { id: 'b', location_id: 'küche', compartment_id: 'oben' },
+    { id: 'c', location_id: 'keller', compartment_id: null },
+    { id: 'd', location_id: 'keller', compartment_id: 'unten' },
+  ];
+  assert.deepEqual(orderStockPositions(entries,
+    [{ id: 'küche' }, { id: 'keller' }], [{ id: 'unten' }, { id: 'oben' }])
+    .map((entry) => entry.id), ['b', 'c', 'd', 'a']);
+  assert.deepEqual(entries.map((entry) => entry.id), ['a', 'b', 'c', 'd']);
+});
+
+test('Sortierung wird gemeinsam gespeichert; veraltete Änderungen und API-Fehler werden gemeldet', async () => {
+  saveConnection({ inventoryId: '11111111-1111-4111-8111-111111111111', deviceId: 'd', deviceToken: 't' });
+  const original = globalThis.fetch;
+  const order = { categories: ['Fisch', 'Gemüse'], locations: [], compartments: [] };
+  const stored = { ...order, updated_at: '2026-11-15T22:00:00+00:00' };
+  const calls = [];
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options });
+    return new Response(JSON.stringify([stored]), { status: 200 });
+  };
+  try {
+    assert.deepEqual(await saveSorting(order, null), stored);
+    assert.equal(calls[0].options.method, 'POST');
+    assert.deepEqual(JSON.parse(calls[0].options.body), {
+      inventory_id: '11111111-1111-4111-8111-111111111111', ...order,
+    });
+    assert.deepEqual(await saveSorting(order, stored), stored);
+    assert.equal(calls[1].options.method, 'PATCH');
+    assert.ok(calls[1].url.includes(`updated_at=eq.${encodeURIComponent(stored.updated_at)}`));
+    assert.deepEqual(await loadSorting(), stored);
+    globalThis.fetch = async () => new Response('[]', { status: 200 });
+    await assert.rejects(saveSorting(order, stored), /zwischenzeitlich geändert/);
+    assert.equal(await loadSorting(), null);
+    globalThis.fetch = async () => new Response('{"message":"Nicht berechtigt"}', { status: 403 });
+    await assert.rejects(saveSorting(order, null), /Nicht berechtigt/);
+    await assert.rejects(loadSorting(), /Nicht berechtigt/);
+  } finally {
+    globalThis.fetch = original;
+    clearConnection();
+  }
+});
+
 test('Bestand gruppiert Positionen nach Produktkategorie und erhält mehrere Orte pro Produkt', () => {
   const products = new Map([
     ['z', { name: 'Zander', category: 'Fisch' }],
@@ -133,6 +209,112 @@ test('Katalogbestand summiert Stückzahlen über Orte und ignoriert alte Gewicht
   assert.equal(productStockLabel('fruit', entries), 'Kein Bestand');
   assert.equal(productStockLabel('empty', entries), 'Kein Bestand');
   assert.equal(productStockLabel('fish', [{ item_id: 'fish', quantity: 0, weight_grams: 0 }]), 'Kein Bestand');
+});
+
+test('Google Suche kombiniert die aktuellen Felder und kodiert Sonderzeichen als Suchtext', () => {
+  const url = new URL(productSearchURL(' 00123 ', ' Fisch & Chips #1 '));
+  assert.equal(url.origin, 'https://www.google.com');
+  assert.equal(url.pathname, '/search');
+  assert.equal(url.searchParams.get('q'), '00123 Fisch & Chips #1');
+  assert.equal(url.hash, '');
+  assert.equal(new URL(productSearchURL('', 'Lachs')).searchParams.get('q'), 'Lachs');
+  assert.equal(new URL(productSearchURL('00123', '')).searchParams.get('q'), '00123');
+  assert.throws(() => productSearchURL(' ', ''), /Produktnamen oder eine Produktnummer/);
+});
+
+test('Bild-URL wird ohne Geräte-Header, Cookies oder Referrer geladen und über den WebP-Upload gespeichert', async (t) => {
+  saveConnection({ inventoryId: '11111111-1111-4111-8111-111111111111', deviceId: 'test', deviceToken: 'test' });
+  const previousDocument = globalThis.document;
+  const previousBitmap = globalThis.createImageBitmap;
+  const uploaded = [];
+  let bitmapClosed = false;
+  globalThis.createImageBitmap = async (file) => {
+    assert.equal(file.type, 'image/png');
+    assert.equal(file.size, 3);
+    return { width: 3200, height: 1600, close() { bitmapClosed = true; } };
+  };
+  const canvas = {
+    width: 0, height: 0,
+    getContext() { return { drawImage() {} }; },
+    toBlob(callback, type) {
+      assert.equal(this.width, 1600);
+      assert.equal(this.height, 800);
+      assert.equal(type, 'image/webp');
+      callback(new Blob(['converted-webp'], { type }));
+    },
+  };
+  globalThis.document = { createElement: () => canvas };
+  t.after(() => {
+    globalThis.document = previousDocument;
+    globalThis.createImageBitmap = previousBitmap;
+    clearConnection();
+  });
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (url === 'https://example.invalid/image.png') {
+      assert.equal(options.credentials, 'omit');
+      assert.equal(options.referrerPolicy, 'no-referrer');
+      assert.equal(options.mode, 'cors');
+      assert.equal(options.headers, undefined);
+      return new Response(new Uint8Array([1, 2, 3]), { headers: { 'Content-Type': 'image/png' } });
+    }
+    uploaded.push({ url, options });
+    return new Response(JSON.stringify({ path: 'inventory/product/image.webp' }), { status: 200 });
+  });
+  const image = await loadImageURL(' https://example.invalid/image.png ');
+  await uploadImage('product', image, 2);
+  assert.equal(bitmapClosed, true);
+  assert.equal(uploaded.length, 2);
+  assert.equal(uploaded[0].options.body.type, 'image/webp');
+  assert.equal(uploaded[0].options.headers['x-item-id'], 'product');
+  assert.deepEqual(JSON.parse(uploaded[1].options.body), {
+    item_id: 'product', path: 'inventory/product/image.webp', caption: image.name, sort_order: 2,
+  });
+});
+
+test('Bild-URL weist ungültige Adressen, Webseiten und fehlgeschlagene Downloads ausdrücklich ab', async (t) => {
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    calls++;
+    return new Response('<html></html>', { headers: { 'Content-Type': 'text/html' } });
+  });
+  for (const url of ['', '/image.png', 'data:image/png;base64,YQ==', 'ftp://example.invalid/a.png',
+    'https://user:password@example.invalid/image.png']) {
+    await assert.rejects(loadImageURL(url), /Bild-URL/);
+  }
+  assert.equal(calls, 0);
+  await assert.rejects(loadImageURL('https://example.invalid/page'), /Bilddatei/);
+  t.mock.method(globalThis, 'fetch', async () => new Response('', { status: 404 }));
+  await assert.rejects(loadImageURL('https://example.invalid/missing'), /HTTP 404/);
+  t.mock.method(globalThis, 'fetch', async () => { throw new TypeError('Failed to fetch'); });
+  await assert.rejects(loadImageURL('https://example.invalid/blocked'), /CORS-Freigabe/);
+  t.mock.method(globalThis, 'fetch', async () =>
+    new Response(new Uint8Array(), { headers: { 'Content-Type': 'image/png' } }));
+  await assert.rejects(loadImageURL('https://example.invalid/empty'), /leere Bilddatei/);
+  t.mock.method(globalThis, 'fetch', async () => new Response(new ReadableStream({
+    start(controller) { controller.error(new Error('Connection interrupted')); },
+  }), { headers: { 'Content-Type': 'image/png' } }));
+  await assert.rejects(loadImageURL('https://example.invalid/interrupted'), /nicht vollständig geladen/);
+});
+
+test('Bild-URL akzeptiert exakt 25 MB und stoppt größere Downloads auch ohne Content-Length', async (t) => {
+  const maxBytes = 25 * 1024 * 1024;
+  const bytes = new Uint8Array(maxBytes);
+  t.mock.method(globalThis, 'fetch', async () =>
+    new Response(bytes, { headers: { 'Content-Type': 'image/png', 'Content-Length': String(maxBytes) } }));
+  assert.equal((await loadImageURL('https://example.invalid/max.png')).size, maxBytes);
+  t.mock.method(globalThis, 'fetch', async () =>
+    new Response('x', { headers: { 'Content-Type': 'image/png', 'Content-Length': String(maxBytes + 1) } }));
+  await assert.rejects(loadImageURL('https://example.invalid/large.png'), /maximal 25 MB/);
+  let cancelled = false;
+  t.mock.method(globalThis, 'fetch', async () => new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.enqueue(new Uint8Array([1]));
+    },
+    cancel() { cancelled = true; },
+  }), { headers: { 'Content-Type': 'image/png' } }));
+  await assert.rejects(loadImageURL('https://example.invalid/stream.png'), /maximal 25 MB/);
+  assert.equal(cancelled, true);
 });
 
 test('Produktbilder werden signiert angezeigt; veraltete Dialog-Ladevorgänge ändern keine Bilder', async (t) => {
@@ -274,11 +456,13 @@ test('Offline-Kopie speichert Produkte, Bestand und Ortsnamen und verwirft alte 
   const locations = [{ id: 'cellar', name: 'Keller' }];
   const compartments = [{ id: 'c1', location_id: 'cellar', name: 'Fach 1' }];
   const products = [{ id: 'a', product_number: '00123', weight_grams: '500.125' }];
-  saveSnapshot(products, [{ item_id: 'a', quantity: 3 }], locations, compartments);
+  const sorting = { categories: ['Fisch'], locations: ['cellar'], compartments: ['c1'] };
+  saveSnapshot(products, [{ item_id: 'a', quantity: 3 }], locations, compartments, sorting);
   assert.deepEqual(loadSnapshot().items, products);
   assert.deepEqual(loadSnapshot().stockEntries, [{ item_id: 'a', quantity: 3 }]);
   assert.deepEqual(loadSnapshot().locations, locations);
   assert.deepEqual(loadSnapshot().compartments, compartments);
+  assert.deepEqual(loadSnapshot().sorting, sorting);
   clearConnection();
   assert.equal(loadSnapshot(), null);
   assert.equal(storage.has('eisfach.inventory'), false);

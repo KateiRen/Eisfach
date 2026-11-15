@@ -14,6 +14,7 @@ Geräteprüfung, Bildspeicher und serverseitige Funktionen laufen ausschließlic
 ├── app.html                   Inventar
 ├── devices.html               Geräteverwaltung
 ├── freezer.html               Orte und Fächer verwalten
+├── sorting.html               Inventarweite Anzeige-Reihenfolge
 ├── appearance.html            Persönliche Akzentfarben
 ├── transfer.html              JSON-Export und ergänzender Import
 ├── css/app.css                Mobile-First-Layout
@@ -26,6 +27,8 @@ Geräteprüfung, Bildspeicher und serverseitige Funktionen laufen ausschließlic
 │   ├── scanner.js             QR-Erzeugung und Kamerascan
 │   ├── inventory.js           Produktkatalog und Bestände je Lagerort
 │   ├── devices.js             Geräte und einmalige Join-Codes
+│   ├── ordering.js            Gemeinsame Sortierung laden und anwenden
+│   ├── sorting.js             Reihenfolge der Kategorien, Orte und Fächer ändern
 │   ├── appearance.js          Lokale Farbeinstellungen und Vorschau
 │   ├── transfer.js            JSON-Sicherung, Prüfung und Import
 │   └── app.js                 Seitenstart
@@ -215,6 +218,17 @@ nicht mehr allein wegen einer alten Gewichtsangabe als eingelagert.
 Alte Offline-Kopien werden verworfen; nach der Umstellung einmal online laden.
 Die Geräteverbindung bleibt erhalten. Bei einem Abbruch `ROLLBACK;` ausführen.
 
+### Anzeige-Reihenfolge hinzufügen
+
+Nach den bisherigen Migrationen
+[`supabase/migrations/202611150004_inventory_sorting.sql`](./supabase/migrations/202611150004_inventory_sorting.sql)
+**einmalig** im Supabase SQL Editor ausführen, bevor das neue Frontend
+veröffentlicht wird. Die Migration ergänzt `inventory_sorting` mit
+gerätegeprüften Zugriffsrechten und verändert keine Produkte oder Bestände.
+Bei einer neuen Datenbank ist die Tabelle bereits in `schema.sql` enthalten.
+Anschließend alle App-Tabs schließen und neu öffnen, um den aktualisierten
+Service Worker zu laden.
+
 Der Browser speichert die dauerhafte Geräteverbindung als
 
 ```json
@@ -268,7 +282,7 @@ python3 -m http.server 8000
 Service Worker benötigen einen Webserver; Kamera und Service Worker benötigen
 außerhalb von localhost HTTPS. Es sind weder `npm install` noch Build-Tools erforderlich.
 
-Die gezielten Tests für Bestandsfilter, Eingabewerte, Offline-Kopie und Akzentfarben benötigen
+Die gezielten Tests für Bestandsfilter, Sortierung, Eingabewerte, Offline-Kopie und Akzentfarben benötigen
 nur ein vorhandenes Node.js:
 
 ```sh
@@ -292,9 +306,11 @@ Die SQL- und Edge-Quelldateien dürfen öffentlich sein, enthalten aber keine Se
 1. Ohne gespeicherte Verbindung öffnet die App `setup.html`. Inventarnamen und
    Gerätenamen eingeben. Das erste Gerät wird zusammen mit dem Inventar angelegt.
 2. In der **Produktliste** Produkte mit optionaler Produktnummer, Packungsgewicht,
-   Kategorie, Zubereitungszeit und optionaler Auftauzeit anlegen. Der Katalog ist nach Kategorien gruppiert; Kategorien und
-   Produkte innerhalb jeder Kategorie sind alphabetisch sortiert. Produkte ohne
-   Kategorie erscheinen am Ende unter **Ohne Kategorie**. Suche und Kategoriefilter
+   Kategorie, Zubereitungszeit und optionaler Auftauzeit anlegen. Der Katalog ist
+   nach Kategorien gruppiert. Deren Reihenfolge ist unter **Einstellungen → Sortierung**
+   einstellbar; ohne Vorgabe gilt die alphabetische Reihenfolge. Produkte innerhalb
+   jeder Kategorie bleiben alphabetisch sortiert. Produkte ohne Kategorie erscheinen
+   standardmäßig am Ende unter **Ohne Kategorie**. Suche und Kategoriefilter
    schränken die Gruppen auf passende Produkte ein.
    Katalogkarten zeigen Name, Produktnummer, Teile, Packungsgewicht und den aktuellen Bestand
    (summierte Stückzahl und Anzahl belegter Positionen) sowie kompakte Buttons
@@ -304,6 +320,14 @@ Die SQL- und Edge-Quelldateien dürfen öffentlich sein, enthalten aber keine Se
    Zeile mit Name sowie den Textaktionen **Bearbeiten** und **Einlagern**.
    Vorhandene Produktbilder stehen im Bearbeitungsdialog direkt über
    **Bilder hinzufügen** und können dort gelöscht werden.
+   Neben der Dateiauswahl kann unter **Bild-URL** eine direkte HTTP-/HTTPS-Bildadresse
+   eingetragen werden. **Speichern** lädt das Bild (maximal 25 MB), komprimiert es
+   wie ausgewählte Dateien auf maximal 1600 Pixel als WebP und speichert eine
+   unabhängige Kopie in Supabase. Die Quelle muss Browserabrufe per CORS erlauben;
+   gesperrte Abrufe, Webseiten statt Bildern und Downloadfehler werden gemeldet.
+   In diesem Fall das Bild herunterladen und über die Dateiauswahl hinzufügen.
+   **Google Suche** öffnet die aktuell eingegebene Produktnummer und den Produktnamen
+   als Suchanfrage in einem neuen Tab. Suchbegriffe werden dabei an Google übermittelt.
    **Produkt löschen** steht bei gespeicherten Produkten links neben **Speichern**;
    der Bearbeitungsdialog enthält keinen Button **Bilder & QR**.
    Die Listenansichten bieten keinen Produkt-QR-Scan; der QR-Scan zum Verbinden
@@ -371,7 +395,7 @@ ebenfalls speichern. Die Einstellung gilt offline und auf allen Seiten, aber nur
 im aktuellen Browserprofil, nicht inventarweit oder geräteübergreifend.
 Da es keine Benutzerkonten gibt, teilen sich Personen im selben Browserprofil
 auch die Farben. Zum Laden der neuen App-Version alle App-Tabs schließen und neu öffnen.
-**Einstellungen → Gefrierschrank** zeigt die definierten Orte und ihre optionalen
+**Einstellungen → Orte und Fächer** zeigt die definierten Orte und ihre optionalen
 Fächer. Beide lassen sich anlegen, umbenennen und löschen. Beim Löschen kann ein
 Ersatzort mit optionalem Fach gewählt werden; bei vorhandenen Bestandspositionen
 ist er verpflichtend. Beim Löschen eines Fachs kann auch dessen übergeordneter Ort
@@ -379,6 +403,19 @@ ohne Fach als Ersatz dienen. Die Umlagerung aller betroffenen Positionen und das
 Löschen erfolgen in einer Datenbanktransaktion, ohne Mengen oder Gewichte zu ändern.
 Belegte Orte/Fächer können nicht ohne Ersatz gelöscht werden. Beim Umbenennen
 bleiben Zuordnungen über stabile IDs erhalten.
+
+**Einstellungen → Sortierung** bietet **Nach oben** und **Nach unten** für
+Kategorien, Orte und Fächer innerhalb des jeweiligen Ortes. **Speichern** übernimmt
+alle Reihenfolgen gemeinsam für das gesamte Inventar; andere Geräte laden sie
+beim nächsten Öffnen oder Neuladen. Kategorien bestimmen die Gruppen und Filter
+in Produktliste und Bestand. Die Orts- und Fachreihenfolge gilt für die Verwaltung,
+Auswahlfelder und mehrere Bestandspositionen desselben Produkts. **Ohne Fach**
+bleibt die erste Auswahl; **Ohne Kategorie** lässt sich wie andere Kategorien
+verschieben. Neue Einträge erscheinen nach den gespeicherten Einträgen
+alphabetisch, neue Produkte ohne Kategorie standardmäßig zuletzt.
+Änderungen benötigen Internet. Die Offline-Lesekopie behält die zuletzt geladene
+Reihenfolge. Gleichzeitige Änderungen werden beim Speichern erkannt und gemeldet;
+dann die Seite neu laden. JSON-Export und -Import übertragen die Sortierung nicht.
 
 Die Bestandsverwaltung bietet ausschließlich Dropdowns für definierte Orte und
 zugehörige Fächer; **Ohne Fach** ist bei jedem Ort möglich. Zuerst mindestens einen
@@ -461,6 +498,7 @@ ausführen, beispielsweise:
 ```sh
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/product_stock.sql
 psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/storage_locations.sql
+psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/inventory_sorting.sql
 ```
 
 Der Check legt seine Testdaten innerhalb einer Transaktion an und verwirft sie

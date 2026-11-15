@@ -41,7 +41,12 @@
         </div>
         <label>Notizen<textarea name="notes" maxlength="4000"></textarea></label>
         <div id="editor-images" class="images" aria-label="Vorhandene Produktbilder"></div>
-        <label>Bilder hinzufügen<input name="images" type="file" accept="image/*" multiple></label>
+        <div class="columns">
+          <label>Bilder hinzufügen<input name="images" type="file" accept="image/*" multiple></label>
+          <label>Bild-URL<input name="image_url" type="url" placeholder="https://…" aria-describedby="image-url-help"></label>
+        </div>
+        <a id="google-search" class="button secondary" href="https://www.google.com/search" target="_blank" rel="noopener noreferrer">Google Suche</a>
+        <p id="image-url-help">Eine direkte Bild-URL wird beim Speichern importiert. Die Bildquelle muss den Abruf im Browser erlauben (CORS).</p>
         <p>Bilder werden auf maximal 1600 Pixel verkleinert und als WebP gespeichert.</p>
         <p id="editor-status" role="status"></p>
         <div class="actions">
@@ -63,7 +68,7 @@
           <label>Ort<select name="location_id" required></select></label>
           <label>Fach (optional)<select name="compartment_id"><option value="">Ohne Fach</option></select></label>
         </div>
-        <p>Orte und Fächer unter <a href="./freezer.html">Einstellungen → Gefrierschrank</a> verwalten.</p>
+        <p>Orte und Fächer unter <a href="./freezer.html">Einstellungen → Orte und Fächer</a> verwalten.</p>
         <label for="stock-quantity">Stückzahl</label>
         <div class="quantity-control">
           <button id="quantity-down" type="button" class="secondary" aria-label="Stückzahl verringern">-</button>
