@@ -14,6 +14,7 @@ Geräteprüfung, Bildspeicher und serverseitige Funktionen laufen ausschließlic
 ├── app.html                   Inventar
 ├── devices.html               Geräteverwaltung
 ├── freezer.html               Orte und Fächer verwalten
+├── appearance.html            Persönliche Akzentfarben
 ├── css/app.css                Mobile-First-Layout
 ├── js/
 │   ├── config.js              Öffentliche Supabase-Konfiguration
@@ -24,6 +25,7 @@ Geräteprüfung, Bildspeicher und serverseitige Funktionen laufen ausschließlic
 │   ├── scanner.js             QR-Erzeugung und Kamerascan
 │   ├── inventory.js           Produktkatalog und Bestände je Lagerort
 │   ├── devices.js             Geräte und einmalige Join-Codes
+│   ├── appearance.js          Lokale Farbeinstellungen und Vorschau
 │   └── app.js                 Seitenstart
 ├── assets/                    App-Icon und lokale QR-Bibliotheken mit Lizenzen
 ├── manifest.json
@@ -161,7 +163,7 @@ anlegen. Die alte Offline-Kopie wird wegen des geänderten Formats verworfen;
 nach der Umstellung einmal online laden. Geräteverbindungen bleiben erhalten.
 Bei Fehlern gegebenenfalls `ROLLBACK;` ausführen; keine Teilmigration übernehmen.
 
-Der Browser speichert ausschließlich die dauerhafte Geräteverbindung als
+Der Browser speichert die dauerhafte Geräteverbindung als
 
 ```json
 { "inventoryId": "...", "deviceId": "...", "deviceToken": "..." }
@@ -173,6 +175,8 @@ Zusätzlich wird unter `eisfach.inventory` eine versionierte Offline-Lesekopie v
 Produktkatalog und Beständen gespeichert. Alte reine Artikellisten werden nicht
 als neue Bestände interpretiert; nach dem Upgrade einmal online laden.
 `clearConnection()` entfernt Verbindung und Offline-Kopie.
+Persönliche Farbeinstellungen liegen separat unter `eisfach.appearance` und
+bleiben beim Trennen einer Geräteverbindung erhalten.
 
 Jeder geschützte REST-Aufruf enthält `apikey`, `x-inventory-id`, `x-device-id`
 und `x-device-token`. RLS ermittelt über `current_inventory_id()` die aktive
@@ -212,7 +216,7 @@ python3 -m http.server 8000
 Service Worker benötigen einen Webserver; Kamera und Service Worker benötigen
 außerhalb von localhost HTTPS. Es sind weder `npm install` noch Build-Tools erforderlich.
 
-Die gezielten Tests für Bestandsfilter, Eingabewerte und Offline-Kopie benötigen
+Die gezielten Tests für Bestandsfilter, Eingabewerte, Offline-Kopie und Akzentfarben benötigen
 nur ein vorhandenes Node.js:
 
 ```sh
@@ -288,6 +292,16 @@ Die SQL- und Edge-Quelldateien dürfen öffentlich sein, enthalten aber keine Se
 
 Das gemeinsame **Menü** bietet **Bestand**, **Produktkatalog** und **Einstellungen**.
 Unter **Einstellungen → Geräte** liegt die bisherige Geräteverwaltung.
+Unter **Einstellungen → Aussehen** ist **Akzentfarbe** die erste Einstellung.
+Die Hauptfarbe gestaltet Kopfzeile und Buttons; eine optionale zweite Akzentfarbe
+gestaltet Links und Hervorhebungen. Beschriftungen und bei Bedarf die für Text
+verwendete Farbvariante werden automatisch kontrastreich gewählt.
+Änderungen erscheinen direkt als Vorschau und werden erst mit **Speichern**
+dauerhaft übernommen. **Standardfarben** stellt die Vorschau zurück; anschließend
+ebenfalls speichern. Die Einstellung gilt offline und auf allen Seiten, aber nur
+im aktuellen Browserprofil, nicht inventarweit oder geräteübergreifend.
+Da es keine Benutzerkonten gibt, teilen sich Personen im selben Browserprofil
+auch die Farben. Zum Laden der neuen App-Version alle App-Tabs schließen und neu öffnen.
 **Einstellungen → Gefrierschrank** zeigt die definierten Orte und ihre optionalen
 Fächer. Beide lassen sich anlegen, umbenennen und löschen. Beim Löschen kann ein
 Ersatzort mit optionalem Fach gewählt werden; bei vorhandenen Bestandspositionen
@@ -304,6 +318,10 @@ und Fachnamen sind nach erfolgreichem Laden weiterhin offline lesbar.
 Bestand und Produktkatalog sind direkt über
 `app.html#stock` bzw. `app.html#catalog` erreichbar; die Browsernavigation
 wechselt ebenfalls zwischen diesen Ansichten.
+Im Produktkatalog blendet der Filter **Nur mit Bestand** Produkte ohne positive
+Stückzahl und ohne positives Gesamtgewicht aus. Er lässt sich mit Suche und
+Kategorie kombinieren und funktioniert auch mit der Offline-Kopie. In der
+Bestandsansicht sind ohnehin nur eingelagerte Positionen sichtbar.
 
 ### QR und PWA / Offline
 

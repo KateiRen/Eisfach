@@ -1,5 +1,6 @@
 import { loadConnection, clearConnection } from './auth.js';
 import { checkConnection } from './supabase.js';
+import { loadAppearance, applyAppearance, initAppearance } from './appearance.js';
 
 export function status(message) {
   document.querySelector('#status').textContent = message;
@@ -36,6 +37,7 @@ function initNavigation(page) {
     ['Produktkatalog', './app.html#catalog', 'catalog'],
     ['Geräte', './devices.html', 'devices'],
     ['Gefrierschrank', './freezer.html', 'freezer'],
+    ['Aussehen', './appearance.html', 'appearance'],
   ]) {
     const link = element('a', label);
     link.href = href;
@@ -67,6 +69,7 @@ function initNavigation(page) {
 }
 
 async function init() {
+  try { applyAppearance(loadAppearance()); } catch (error) { status(error.message); }
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./service-worker.js').catch(() => {});
   }
@@ -86,6 +89,7 @@ async function init() {
     return;
   }
   initNavigation(page);
+  if (page === 'appearance') initAppearance();
   if (navigator.onLine) {
     try { await checkConnection(); } catch (error) {
       if (error.revoked) {

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#126b73">
+  <title>Aussehen · Eisfach</title>
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="./css/app.css">
+  <script type="module" src="./js/app.js"></script>
+</head>
+<body data-page="appearance">
+  <header><a href="./app.html">❄ Eisfach</a><nav aria-label="Hauptnavigation"></nav></header>
+  <main class="narrow">
+    <h1>Aussehen</h1>
+    <p id="status" role="status"></p>
+    <form id="appearance-form" class="card">
+      <h2>Akzentfarbe</h2>
+      <p>Die Hauptfarbe gilt für Kopfzeile und Buttons. Optional kannst du Links und Hervorhebungen eine zweite Farbe geben. Beschriftungen werden für gute Lesbarkeit automatisch angepasst.</p>
+      <label for="accent-primary">Hauptfarbe</label>
+      <input id="accent-primary" name="primary" type="color" value="#126b73">
+      <p>Gewählte Farbe: <output id="primary-value" for="accent-primary"></output></p>
+      <label class="checkbox-label"><input id="use-secondary" type="checkbox"> Zweite Akzentfarbe verwenden</label>
+      <div id="secondary-color" hidden>
+        <label for="accent-secondary">Zweite Akzentfarbe</label>
+        <input id="accent-secondary" name="secondary" type="color" value="#126b73" disabled>
+        <p>Gewählte Farbe: <output id="secondary-value" for="accent-secondary"></output></p>
+      </div>
+      <p><a href="./app.html">Beispiellink zum Inventar</a></p>
+      <p>Die Farben bleiben nur in diesem Browser auf diesem Gerät gespeichert, auch offline. Andere Geräte und Personen mit eigenem Browserprofil sind davon unabhängig. Auf gemeinsam genutzten Browserprofilen gilt dieselbe Einstellung.</p>
+      <div class="actions">
+        <button type="submit">Speichern</button>
+        <button id="reset-appearance" type="button" class="secondary">Standardfarben</button>
+      </div>
+    </form>
+  </main>
+</body>
+</html>

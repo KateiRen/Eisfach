@@ -1,9 +1,9 @@
-const CACHE = 'eisfach-shell-v8';
+const CACHE = 'eisfach-shell-v10';
 const SHELL = [
-  './', './index.html', './setup.html', './app.html', './devices.html', './freezer.html',
+  './', './index.html', './setup.html', './app.html', './devices.html', './freezer.html', './appearance.html',
   './css/app.css', './js/config.js', './js/supabase.js', './js/auth.js',
   './js/storage.js', './js/setup.js', './js/scanner.js', './js/inventory.js',
-  './js/devices.js', './js/freezer.js', './js/locations.js', './js/app.js', './manifest.json', './assets/icon.svg',
+  './js/devices.js', './js/freezer.js', './js/locations.js', './js/appearance.js', './js/app.js', './manifest.json', './assets/icon.svg',
   './assets/vendor/qrcode.js', './assets/vendor/jsQR.js',
 ];
 const shellURLs = new Set(SHELL.map((path) => new URL(path, self.registration.scope).href));

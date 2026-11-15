@@ -121,13 +121,16 @@ function render() {
   const version = ++renderVersion;
   const search = document.querySelector('#search').value.toLocaleLowerCase('de');
   const category = document.querySelector('#category').value;
+  const onlyWithStock = document.querySelector('#only-with-stock').checked;
   const matches = (item, locations) => (!category || item.category === category) &&
     [item.name, item.description, item.category, item.notes, item.qr_code, ...locations]
       .some((value) => String(value || '').toLocaleLowerCase('de').includes(search));
   const itemById = new Map(items.map((item) => [item.id, item]));
   const label = (entry) => locationLabel(entry, locations, compartments);
   const visible = currentView === 'catalog'
-    ? items.filter((item) => matches(item, stockEntries.filter((entry) => entry.item_id === item.id).map(label)))
+    ? items.filter((item) =>
+        (!onlyWithStock || stockEntries.some((entry) => entry.item_id === item.id && hasStock(entry))) &&
+        matches(item, stockEntries.filter((entry) => entry.item_id === item.id).map(label)))
     : stockEntries.filter((entry) => hasStock(entry) && itemById.has(entry.item_id) &&
         matches(itemById.get(entry.item_id), [label(entry)]));
   document.querySelector('#empty').hidden = visible.length > 0;
@@ -242,6 +245,7 @@ export async function loadStockPreview(item, preview, isCurrent) {
 function setView(view) {
   currentView = view;
   document.querySelector('#view-title').textContent = view === 'catalog' ? 'Produktkatalog' : 'Bestand';
+  document.querySelector('#stock-filter').hidden = view !== 'catalog';
   for (const link of document.querySelectorAll('[data-navigation="stock"], [data-navigation="catalog"]')) {
     if (link.dataset.navigation === view) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
@@ -478,6 +482,7 @@ export async function initInventory() {
   syncView();
   document.querySelector('#search').addEventListener('input', render);
   document.querySelector('#category').addEventListener('change', render);
+  document.querySelector('#only-with-stock').addEventListener('change', render);
   document.querySelector('#add-item').addEventListener('click', () => editItem());
   document.querySelector('#add-stock').addEventListener('click', () => editStock());
   document.querySelector('#cancel-item').addEventListener('click', () => dialog().close());
