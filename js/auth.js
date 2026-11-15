@@ -28,10 +28,11 @@ export function clearConnection() {
   localStorage.removeItem(SNAPSHOT_KEY);
 }
 
-export function saveSnapshot(items) {
+export function saveSnapshot(items, stockEntries) {
   try {
     localStorage.setItem(SNAPSHOT_KEY, JSON.stringify({
-      inventoryId: loadConnection()?.inventoryId, savedAt: new Date().toISOString(), items,
+      version: 2, inventoryId: loadConnection()?.inventoryId,
+      savedAt: new Date().toISOString(), items, stockEntries,
     }));
   } catch { /* Offline-Kopie ist optional (z. B. bei vollem Browserspeicher). */ }
 }
@@ -39,7 +40,8 @@ export function saveSnapshot(items) {
 export function loadSnapshot() {
   try {
     const snapshot = JSON.parse(localStorage.getItem(SNAPSHOT_KEY));
-    return snapshot?.inventoryId === loadConnection()?.inventoryId && Array.isArray(snapshot?.items)
+    return snapshot?.version === 2 && snapshot.inventoryId === loadConnection()?.inventoryId &&
+      Array.isArray(snapshot.items) && Array.isArray(snapshot.stockEntries)
       ? snapshot : null;
   } catch {
     return null;

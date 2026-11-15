@@ -21,7 +21,7 @@ Geräteprüfung, Bildspeicher und serverseitige Funktionen laufen ausschließlic
 │   ├── storage.js             WebP-Komprimierung und private Bilder
 │   ├── setup.js               Einrichtungsassistent
 │   ├── scanner.js             QR-Erzeugung und Kamerascan
-│   ├── inventory.js           Artikel, Suche, Filter und Mengen
+│   ├── inventory.js           Produktkatalog und Bestände je Lagerort
 │   ├── devices.js             Geräte und einmalige Join-Codes
 │   └── app.js                 Seitenstart
 ├── assets/                    App-Icon und lokale QR-Bibliotheken mit Lizenzen
@@ -29,6 +29,7 @@ Geräteprüfung, Bildspeicher und serverseitige Funktionen laufen ausschließlic
 ├── service-worker.js
 ├── supabase/
 │   ├── schema.sql             Tabellen, Rechte, RLS, RPCs und Storage
+│   ├── migrations/            SQL-Upgrades für bestehende Datenbanken
 │   ├── config.toml
 │   └── functions/             Edge Functions und gemeinsame Hilfsfunktionen
 ├── .nojekyll
@@ -76,10 +77,66 @@ Geräteprüfung, Bildspeicher und serverseitige Funktionen laufen ausschließlic
 ### Daten und Zugriffsmodell
 
 Das Schema enthält `inventories`, `join_tokens`, `device_registrations`, `items`,
-`item_images` und `audit_log` sowie eine interne Tabelle für Registrierungslimits.
+`stock_entries`, `item_images` und `audit_log` sowie eine interne Tabelle für Registrierungslimits.
 Anstelle von Klartextfeldern `token` und `device_token` werden absichtlich
 `token_hash` und `device_token_hash` gespeichert. IDs sind UUIDs; Zeitstempel werden serverseitig geführt.
-Mengen sind nichtnegative Ganzzahlen. Artikel haben einen stabilen QR-Code.
+Produkte haben einen stabilen QR-Code. Produktkatalog und tatsächlicher Bestand
+sind getrennt:
+
+| Tabelle / Feld | Bedeutung |
+| --- | --- |
+| `items` | Dauerhafte Produkte mit Name, Beschreibung, freier Kategorie und Notizen; unabhängig davon, ob etwas eingelagert ist |
+| `items.preparation_minutes` | Zubereitungszeit in ganzen Minuten; leer (`NULL`) bedeutet unbekannt, 0 bedeutet keine Zubereitung |
+| `items.thawing_minutes` | Optionale Auftauzeit in ganzen Minuten; leer (`NULL`) bedeutet unbekannt, 0 bedeutet kein Auftauen |
+| `stock_entries.item_id` | Zugehöriges Produkt; ein Produkt kann beliebig viele Bestandspositionen haben |
+| `stock_entries.location` | Freier Lagerort, beispielsweise „Kellertruhe · Fach 2“ oder „Küche · Schublade 1“ |
+| `stock_entries.quantity` | Nichtnegative ganzzahlige Stückzahl dieser Position |
+| `stock_entries.weight_grams` | Gesamtgewicht dieser Position in Gramm mit bis zu drei Nachkommastellen; leer (`NULL`) bedeutet unbekannt |
+
+Mehrere Positionen für dasselbe Produkt am selben Lagerort sind erlaubt, etwa
+für unterschiedliche Portionen. Das Gewicht ist **nicht** das Stückgewicht und
+wird bei einer Änderung der Stückzahl nicht automatisch hoch- oder heruntergerechnet.
+Gewicht und Stückzahl werden beim Bearbeiten der Position unabhängig gepflegt.
+Eine Position gilt als eingelagert, wenn Stückzahl oder Gewicht größer als 0 sind.
+Eine Position mit Stückzahl 0 und unbekanntem oder 0 Gewicht erscheint nicht im
+Bestand. Das Produkt bleibt im Katalog und lässt sich jederzeit erneut einlagern.
+
+Bilder gehören weiterhin zum Produkt (`item_images.item_id`), nicht zur
+Bestandsposition. Bestehende Produkt-IDs, Bilderpfade und QR-Codes bleiben gültig.
+Ein zusammengesetzter Fremdschlüssel verhindert Bestandspositionen für Produkte
+eines anderen Inventars. RLS beschränkt beide Tabellen auf aktive Geräte des
+jeweiligen Inventars; Bestandsänderungen werden als `stock.insert`,
+`stock.update` und `stock.delete` protokolliert.
+
+### Bestehende Supabase-Datenbank aktualisieren
+
+Für eine bestehende Installation **nicht** die komplette `schema.sql` erneut
+ausführen. Sie ist ausschließlich für neue Projekte bestimmt.
+
+1. Datenbank sichern und während der Umstellung keine Änderungen in der App vornehmen.
+2. Die vollständige Datei
+   [`supabase/migrations/202611150001_product_stock.sql`](./supabase/migrations/202611150001_product_stock.sql)
+   im Supabase **SQL Editor einmalig** ausführen. Die Datei enthält eine Transaktion:
+   Bei einem Fehler wird keine Teilmigration übernommen; gegebenenfalls `ROLLBACK;`
+   ausführen, bevor der Fehler behoben und die Migration erneut gestartet wird.
+3. Direkt anschließend die zugehörige neue App-Version auf GitHub Pages veröffentlichen.
+   Alte App-Versionen können nach der Migration nicht mehr Mengen und Lagerorte
+   in `items` schreiben. Alle App-Tabs schließen und neu öffnen, damit der neue
+   Service Worker aktiviert wird. Falls noch die alte Oberfläche erscheint,
+   den Service Worker abmelden und den Website-Cache löschen; **nicht** die
+   Geräteverbindung in `localStorage` löschen.
+4. Produktkatalog und Bestände prüfen. Beide registrierten Geräte bleiben verbunden.
+
+Die Migration behält jeden bisherigen Artikel als Produkt. Für jeden Artikel
+mit Menge größer als 0 entsteht eine Bestandsposition mit der bisherigen Menge
+und dem bisherigen Lagerort. Artikel mit Menge 0 bleiben ohne Bestand im Katalog.
+Gewicht und beide Zeiten bleiben zunächst unbekannt; sie werden nicht geschätzt.
+Die alten Spalten `items.quantity` und `items.location` werden anschließend entfernt.
+Lagerorte aktiver Bestände dürfen höchstens 200 Zeichen enthalten; längere
+Altdaten führen zu einem Fehler statt einer stillen Kürzung.
+Die Migration verändert weder Gerätezugänge noch die Rechte von
+`setup_inventory`: Eine zuvor per `REVOKE` gesperrte Inventaranlage bleibt gesperrt.
+Die vorhandenen Edge Functions müssen für diese Umstellung nicht neu veröffentlicht werden.
 
 Der Browser speichert ausschließlich die dauerhafte Geräteverbindung als
 
@@ -89,8 +146,10 @@ Der Browser speichert ausschließlich die dauerhafte Geräteverbindung als
 
 unter `eisfach.connection` in `localStorage`. Die Funktionen `saveConnection()`,
 `loadConnection()` und `clearConnection()` befinden sich in `js/auth.js`.
-Zusätzlich wird unter `eisfach.inventory` eine Offline-Lesekopie der Artikelliste
-gespeichert. `clearConnection()` entfernt beide Einträge.
+Zusätzlich wird unter `eisfach.inventory` eine versionierte Offline-Lesekopie von
+Produktkatalog und Beständen gespeichert. Alte reine Artikellisten werden nicht
+als neue Bestände interpretiert; nach dem Upgrade einmal online laden.
+`clearConnection()` entfernt Verbindung und Offline-Kopie.
 
 Jeder geschützte REST-Aufruf enthält `apikey`, `x-inventory-id`, `x-device-id`
 und `x-device-token`. RLS ermittelt über `current_inventory_id()` die aktive
@@ -130,6 +189,13 @@ python3 -m http.server 8000
 Service Worker benötigen einen Webserver; Kamera und Service Worker benötigen
 außerhalb von localhost HTTPS. Es sind weder `npm install` noch Build-Tools erforderlich.
 
+Die gezielten Tests für Bestandsfilter, Eingabewerte und Offline-Kopie benötigen
+nur ein vorhandenes Node.js:
+
+```sh
+node --test tests/*.test.*
+```
+
 ## GitHub Pages
 
 1. Dateien einschließlich `.nojekyll` ins Repository übernehmen.
@@ -146,9 +212,14 @@ Die SQL- und Edge-Quelldateien dürfen öffentlich sein, enthalten aber keine Se
 
 1. Ohne gespeicherte Verbindung öffnet die App `setup.html`. Inventarnamen und
    Gerätenamen eingeben. Das erste Gerät wird zusammen mit dem Inventar angelegt.
-2. Artikel anlegen, Kategorien und Lagerorte frei vergeben, Mengen ändern,
-   suchen, bearbeiten und löschen. Unter **Bilder & QR** sind Bilder und der
-   Artikel-QR sichtbar. QR-Codes lassen sich mit der Druckfunktion des Browsers ausgeben.
+2. Im **Produktkatalog** Produkte mit Kategorie, Zubereitungszeit und optionaler
+   Auftauzeit anlegen. Über **Einlagern** Bestandspositionen mit Lagerort, Stückzahl
+   und optionalem Gesamtgewicht hinzufügen. Dasselbe Produkt kann gleichzeitig
+   in mehreren Kühltruhen liegen. Die Ansicht **Bestand** zeigt nur eingelagerte
+   Positionen. Beim Entfernen einer Position bleibt das Produkt erhalten;
+   das endgültige Löschen eines Produkts entfernt dagegen auch dessen Bestände
+   und Bilder. Unter **Bilder & QR** sind Produktbilder und der Produkt-QR sichtbar.
+   QR-Codes lassen sich mit der Druckfunktion des Browsers ausgeben.
 3. Unter **Geräte → Neues Gerät verbinden** einen Join-Code erzeugen. Das neue
    Gerät wählt **Inventar verbinden**, scannt den QR-Code oder gibt Inventar-ID
    und Code manuell ein und vergibt seinen Gerätenamen.
@@ -180,7 +251,7 @@ Eine verweigerte Kamerafreigabe wird angezeigt; beim Schließen stoppt die Kamer
 Das Manifest und der Service Worker ermöglichen Installation über die
 Browserfunktion **App installieren / Zum Home-Bildschirm** (browserabhängig).
 Die App-Hülle wird vorab gecacht; private API-Antworten und Bilder **nicht**.
-Die zuletzt erfolgreich geladene Artikelliste ist offline lesbar. Es gibt keine
+Der zuletzt erfolgreich geladene Produktkatalog und dessen Bestände sind offline lesbar. Es gibt keine
 Offline-Schreibwarteschlange und keine automatische Konfliktzusammenführung.
 Nach Wiederherstellung der Verbindung die Seite zum Aktualisieren neu laden.
 
@@ -215,7 +286,26 @@ die Browser-Entwicklerwerkzeuge abgemeldet und der Website-Cache gelöscht werde
 
 ### Integrations-Checkliste
 
+Der SQL-Regressionscheck für Produktkatalog, mehrere Lagerorte, Gewicht, RLS
+und Wieder-Einlagerung liegt unter `supabase/tests/product_stock.sql`.
+Nur gegen eine **separate Testdatenbank** mit dem neuen Schema als `postgres`
+ausführen, beispielsweise:
+
+```sh
+psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/product_stock.sql
+```
+
+Der Check legt seine Testdaten innerhalb einer Transaktion an und verwirft sie
+anschließend mit `ROLLBACK`. Die Migration zusätzlich mit einer Kopie der
+bisherigen Daten prüfen.
+
 - [ ] Inventar anlegen; Artikel mit Bild anlegen, suchen, bearbeiten und löschen.
+- [ ] Ein Produkt an zwei Lagerorten einlagern; Stückzahl und Gesamtgewicht
+      unabhängig bearbeiten. Eine Position entfernen: das andere Lager bleibt erhalten.
+- [ ] Alle Positionen entfernen: Produkt, Zeiten, Bilder und QR bleiben im Katalog.
+      Dasselbe Produkt ohne Neuerfassung wieder einlagern.
+- [ ] Migration mit positiven und Null-Mengen prüfen; bestehende Bilder, Geräte
+      und eine zuvor gesperrte Inventaranlage müssen unverändert funktionieren.
 - [ ] Ein zweites Gerät registrieren; denselben Join-Code erneut verwenden:
       muss abgewiesen werden. Auch abgelaufene Codes müssen scheitern.
 - [ ] Ohne Token, mit falschem Token und mit Inventar-ID eines anderen Inventars
