@@ -136,7 +136,6 @@ async function refresh() {
   renderCategoryFilters(categories);
   document.querySelector('#categories').replaceChildren(...categories.map((category) => new Option(category)));
   document.querySelector('#add-item').disabled = offline;
-  document.querySelector('#add-stock').disabled = offline;
   previewPaths = null;
   previewURLs.clear();
   render();
@@ -162,6 +161,9 @@ function render() {
   const version = ++renderVersion;
   const search = document.querySelector('#search').value;
   const onlyWithStock = document.querySelector('#only-with-stock').checked;
+  const compact = currentView === 'catalog' && document.querySelector('#compact-view').checked;
+  const itemList = document.querySelector('#items');
+  itemList.classList.toggle('compact-list', compact);
   for (const button of document.querySelectorAll('#category-filters button')) {
     button.setAttribute('aria-pressed', String(button.dataset.category === selectedCategory));
   }
@@ -183,6 +185,20 @@ function render() {
     const card = element('article', undefined, 'card');
     if (!entry) {
       card.classList.add('catalog-card');
+      if (compact) {
+        const row = element('div', undefined, 'compact-row');
+        row.append(element('span', item.name, 'compact-name'));
+        const links = element('div', undefined, 'compact-actions');
+        const edit = action('Bearbeiten', () => editItem(item), 'text-link');
+        const add = action('Einlagern', () => editStock(null, item.id), 'text-link');
+        edit.disabled = add.disabled = offline;
+        edit.setAttribute('aria-label', `Bearbeiten: ${item.name}`);
+        add.setAttribute('aria-label', `Einlagern: ${item.name}`);
+        links.append(edit, add);
+        row.append(links);
+        card.append(row);
+        return card;
+      }
       const pack = productPackInfo(item);
       card.append(element('h3', item.name),
         element('p', `Produktnummer: ${item.product_number || '—'}`, 'muted'),
@@ -291,6 +307,7 @@ function setView(view) {
   document.querySelector('#view-title').textContent = title;
   document.title = `${title} · Eisfach`;
   document.querySelector('#stock-filter').hidden = view !== 'catalog';
+  document.querySelector('#compact-view-control').hidden = view !== 'catalog';
   document.querySelector('#add-item').hidden = view !== 'catalog';
   for (const link of document.querySelectorAll('[data-navigation="stock"], [data-navigation="catalog"]')) {
     if (link.dataset.navigation === view) link.setAttribute('aria-current', 'page');
@@ -543,7 +560,6 @@ export async function initInventory() {
   window.addEventListener('offline', () => {
     offline = true;
     document.querySelector('#add-item').disabled = true;
-    document.querySelector('#add-stock').disabled = true;
     updateEditorActions();
     updateStockActions();
     render();
@@ -553,8 +569,8 @@ export async function initInventory() {
   syncView();
   document.querySelector('#search').addEventListener('input', render);
   document.querySelector('#only-with-stock').addEventListener('change', render);
+  document.querySelector('#compact-view').addEventListener('change', render);
   document.querySelector('#add-item').addEventListener('click', () => editItem());
-  document.querySelector('#add-stock').addEventListener('click', () => editStock());
   stockForm().elements.product_number_search.addEventListener('input', () => populateStockProducts());
   stockForm().elements.item_id.addEventListener('change', updateStockProduct);
   stockForm().elements.quantity.addEventListener('input', updateStockActions);

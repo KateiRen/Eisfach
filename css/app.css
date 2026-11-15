@@ -52,6 +52,12 @@ input[type="color"] { width: 100%; max-width: 12rem; height: 3rem; padding: .25r
 .catalog-card p { margin: 0 0 .65rem; }
 .compact-actions { gap: .4rem; }
 .compact-actions button { padding: .4rem .65rem; font-size: .875rem; }
+#items.compact-list .category-group > .grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+.compact-list .catalog-card { padding: .35rem 0; border: 0; border-bottom: 1px solid #cfe0e1; border-radius: 0; box-shadow: none; }
+.compact-row { display: flex; align-items: center; gap: .75rem; min-width: 0; }
+.compact-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compact-row .compact-actions { display: flex; flex: 0 0 auto; gap: .65rem; }
+.compact-actions .text-link { min-height: 0; padding: 0; background: none; color: var(--accent-link); font-weight: 400; text-decoration: underline; }
 .stock-card { display: flex; align-items: start; gap: .85rem; padding: .85rem; }
 .stock-preview { flex: 0 0 96px; width: 96px; min-height: 96px; overflow-wrap: anywhere; font-size: .8rem; color: #49666c; }
 .stock-preview img { display: block; width: 96px; height: 96px; object-fit: contain; border-radius: .4rem; }

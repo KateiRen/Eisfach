@@ -300,13 +300,15 @@ Die SQL- und Edge-Quelldateien dürfen öffentlich sein, enthalten aber keine Se
    (summierte Stückzahl und Anzahl belegter Positionen) sowie kompakte Buttons
    **Bearbeiten** und **Einlagern**. Teile stammen aus der Notizzeile `Teile:`,
    das Gewicht aus dem Produktfeld in Gramm; fehlende Werte erscheinen als „—“.
+   Der Schalter **Kompakte Ansicht** zeigt Produkte stattdessen jeweils in einer
+   Zeile mit Name sowie den Textaktionen **Bearbeiten** und **Einlagern**.
    Vorhandene Produktbilder stehen im Bearbeitungsdialog direkt über
    **Bilder hinzufügen** und können dort gelöscht werden.
    **Produkt löschen** steht bei gespeicherten Produkten links neben **Speichern**;
    der Bearbeitungsdialog enthält keinen Button **Bilder & QR**.
    Die Listenansichten bieten keinen Produkt-QR-Scan; der QR-Scan zum Verbinden
    weiterer Geräte bleibt verfügbar.
-   Über **Einlagern** oder **Bestand hinzufügen** Bestandspositionen mit Lagerort
+   Über **Einlagern** am jeweiligen Produkt Bestandspositionen mit Lagerort
    und Stückzahl hinzufügen. Die Produktnummerneingabe filtert die Produktliste
    nach Teiltreffern; führende Nullen bleiben erhalten. Minus-/Plus-Buttons neben
    der Stückzahl ändern diese innerhalb von 0 bis 2147483647.
