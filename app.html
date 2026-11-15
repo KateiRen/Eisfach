@@ -64,15 +64,12 @@
         </div>
         <p>Das Gewicht gilt für die gesamte Position und wird bei Änderungen der Stückzahl nicht automatisch angepasst. Positionen ohne Stückzahl und Gewicht erscheinen nicht im Bestand.</p>
         <p id="stock-status" role="status"></p>
-        <div class="actions"><button type="submit">Speichern</button><button id="cancel-stock" type="button" class="secondary">Schließen</button></div>
+        <div class="actions">
+          <button id="delete-stock" type="button" class="danger" hidden>Position entfernen</button>
+          <button type="submit">Speichern</button>
+          <button id="cancel-stock" type="button" class="secondary">Schließen</button>
+        </div>
       </form>
-    </dialog>
-    <dialog id="detail-dialog">
-      <h2 id="detail-name"></h2>
-      <div id="detail-images" class="images"></div>
-      <div id="item-qr"></div>
-      <p id="detail-code" class="code"></p>
-      <button id="close-detail" type="button">Schließen</button>
     </dialog>
   </main>
 </body>

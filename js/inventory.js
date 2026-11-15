@@ -1,7 +1,6 @@
 import { rest, list } from './supabase.js';
 import { loadConnection, saveSnapshot, loadSnapshot } from './auth.js';
 import { uploadImage, imageURL, removeImage } from './storage.js';
-import { renderQR } from './scanner.js';
 import { element, action, status } from './app.js';
 import { locationLabel, populateCompartments, locationSelection } from './locations.js';
 
@@ -11,12 +10,16 @@ let locations = [];
 let compartments = [];
 let offline = false;
 let currentView = 'stock';
-let detailVersion = 0;
+let renderVersion = 0;
+let previewPaths = null;
+const previewURLs = new Map();
 let editingVersion = null;
 let editingItem = null;
 let editorBusy = false;
 let editorImageVersion = 0;
 let stockEditingVersion = null;
+let stockEditingEntry = null;
+let stockBusy = false;
 const form = () => document.querySelector('#item-form');
 const dialog = () => document.querySelector('#item-dialog');
 const stockForm = () => document.querySelector('#stock-form');
@@ -26,10 +29,10 @@ export function hasStock(entry) {
   return Number(entry.quantity) > 0 || Number(entry.weight_grams) > 0;
 }
 
-export function groupCatalog(products) {
+export function groupCatalog(products, getProduct = (product) => product) {
   const groups = new Map();
   for (const product of products) {
-    const category = product.category || '';
+    const category = getProduct(product).category || '';
     if (!groups.has(category)) groups.set(category, []);
     groups.get(category).push(product);
   }
@@ -37,7 +40,7 @@ export function groupCatalog(products) {
     a === '' ? 1 : b === '' ? -1 : a.localeCompare(b, 'de'))
     .map(([category, entries]) => ({
       category,
-      items: entries.sort((a, b) => a.name.localeCompare(b.name, 'de')),
+      items: entries.sort((a, b) => getProduct(a).name.localeCompare(getProduct(b).name, 'de')),
     }));
 }
 
@@ -109,10 +112,13 @@ async function refresh() {
   document.querySelector('#categories').replaceChildren(...categories.map((category) => new Option(category)));
   document.querySelector('#add-item').disabled = offline;
   document.querySelector('#add-stock').disabled = offline || !items.length;
+  previewPaths = null;
+  previewURLs.clear();
   render();
 }
 
 function render() {
+  const version = ++renderVersion;
   const search = document.querySelector('#search').value.toLocaleLowerCase('de');
   const category = document.querySelector('#category').value;
   const matches = (item, locations) => (!category || item.category === category) &&
@@ -145,37 +151,92 @@ function render() {
       card.append(buttons);
       return card;
     }
-    card.append(element('h2', item.name), element('p', item.description || ''),
-      element('p', [item.category, label(entry)].filter(Boolean).join(' · '), 'muted'));
-    if (item.notes) card.append(element('p', item.notes));
-    const times = [
-      item.preparation_minutes != null ? `Zubereitung: ${item.preparation_minutes} Min.` : '',
-      item.thawing_minutes != null ? `Auftauen: ${item.thawing_minutes} Min.` : '',
-    ].filter(Boolean);
-    if (times.length) card.append(element('p', times.join(' · ')));
-    card.append(element('p', `Stückzahl: ${entry.quantity}${entry.weight_grams != null ? ` · Gesamtgewicht: ${entry.weight_grams} g` : ''}`));
-    const buttons = element('div', undefined, 'actions');
-    const edit = action('Position bearbeiten', () => editStock(entry));
-    const remove = action('Position entfernen', () => deleteStock(entry), 'danger');
-    const add = action('Einlagern', () => editStock(null, item.id));
-    edit.disabled = remove.disabled = add.disabled = offline;
-    buttons.append(edit, add, action('Bilder & QR', () => showDetails(item)), remove);
-    card.append(document.createElement('hr'), buttons);
+    card.classList.add('stock-card');
+    const preview = element('div', undefined, 'stock-preview');
+    const info = element('div', undefined, 'stock-info');
+    const heading = element('h3');
+    const edit = action(item.name, () => editStock(entry), 'stock-name');
+    edit.disabled = offline;
+    heading.append(edit);
+    info.append(heading,
+      element('p', `Zubereitungszeit: ${item.preparation_minutes != null ? `${item.preparation_minutes} Min.` : '—'}`),
+      element('p', `Vorbereitungszeit: ${item.thawing_minutes != null ? `${item.thawing_minutes} Min.` : ''}`),
+      element('p', `Gewicht: ${entry.weight_grams != null
+        ? `${Number(entry.weight_grams).toLocaleString('de-DE', { maximumFractionDigits: 3 })} g` : '—'}`),
+      element('p', `Ort: ${label(entry)}`));
+    card.append(preview, info);
+    loadStockPreview(item, preview, () => version === renderVersion);
     return card;
   };
-  const content = currentView === 'catalog'
-    ? groupCatalog(visible).map((group, index) => {
-      const section = element('section', undefined, 'catalog-category');
+  const content = groupCatalog(visible, (record) =>
+    currentView === 'catalog' ? record : itemById.get(record.item_id)).map((group, index) => {
+      const section = element('section', undefined, 'category-group');
       const heading = element('h2', group.category || 'Ohne Kategorie');
-      heading.id = `catalog-category-${index}`;
+      heading.id = `category-${index}`;
       section.setAttribute('aria-labelledby', heading.id);
       const cards = element('div', undefined, 'grid');
       cards.append(...group.items.map(renderCard));
       section.append(heading, cards);
       return section;
-    })
-    : visible.map(renderCard);
+    });
   document.querySelector('#items').replaceChildren(...content);
+}
+
+async function stockPreviewURL(itemId) {
+  if (!previewPaths) {
+    previewPaths = list('item_images', '?select=item_id,path&order=sort_order.asc,created_at.asc,id.asc')
+      .then((images) => {
+        const paths = new Map();
+        for (const image of images) if (!paths.has(image.item_id)) paths.set(image.item_id, image.path);
+        return paths;
+      });
+  }
+  const request = previewPaths;
+  let paths;
+  try {
+    paths = await request;
+  } catch (error) {
+    if (previewPaths === request) previewPaths = null;
+    throw error;
+  }
+  const path = paths.get(itemId);
+  if (!path) return null;
+  let cached = previewURLs.get(path);
+  if (!cached || cached.expiresAt <= Date.now()) {
+    cached = { expiresAt: Date.now() + 100000, promise: imageURL(path) };
+    previewURLs.set(path, cached);
+  }
+  try {
+    return await cached.promise;
+  } catch (error) {
+    if (previewURLs.get(path) === cached) previewURLs.delete(path);
+    throw error;
+  }
+}
+
+export async function loadStockPreview(item, preview, isCurrent) {
+  if (!isCurrent()) return;
+  preview.textContent = offline ? 'Bild nur online verfügbar' : 'Bild wird geladen …';
+  if (offline) return;
+  try {
+    const url = await stockPreviewURL(item.id);
+    if (!isCurrent()) return;
+    if (!url) {
+      preview.textContent = 'Kein Bild';
+      return;
+    }
+    const img = element('img');
+    img.src = url;
+    img.alt = item.name;
+    img.loading = 'lazy';
+    img.width = img.height = 96;
+    img.addEventListener('error', () => {
+      if (isCurrent()) preview.textContent = 'Bild konnte nicht geladen werden.';
+    });
+    preview.replaceChildren(img);
+  } catch (error) {
+    if (isCurrent()) preview.textContent = `Bild nicht verfügbar: ${error.message}`;
+  }
 }
 
 function setView(view) {
@@ -297,6 +358,7 @@ async function deleteItem(item) {
 }
 
 function editStock(entry, itemId) {
+  stockEditingEntry = entry || null;
   stockEditingVersion = entry?.updated_at || null;
   stockForm().reset();
   stockForm().elements.item_id.replaceChildren(...items.map((item) => new Option(item.name, item.id)));
@@ -312,15 +374,23 @@ function editStock(entry, itemId) {
   document.querySelector('#stock-title').textContent = entry ? 'Bestandsposition bearbeiten' : 'Bestand hinzufügen';
   document.querySelector('#stock-status').textContent = locations.length
     ? '' : 'Bitte zuerst unter Einstellungen → Gefrierschrank einen Ort anlegen.';
+  updateStockActions();
   stockDialog().showModal();
+}
+
+function updateStockActions() {
+  stockForm().querySelector('[type=submit]').disabled = stockBusy || offline;
+  document.querySelector('#cancel-stock').disabled = stockBusy;
+  const remove = document.querySelector('#delete-stock');
+  remove.hidden = !stockEditingEntry;
+  remove.disabled = stockBusy || offline;
 }
 
 async function saveStock(event) {
   event.preventDefault();
-  const button = stockForm().querySelector('[type=submit]');
-  const cancel = document.querySelector('#cancel-stock');
+  stockBusy = true;
+  updateStockActions();
   const feedback = document.querySelector('#stock-status');
-  button.disabled = cancel.disabled = true;
   feedback.textContent = 'Wird gespeichert …';
   try {
     if (offline) throw new Error('Offline sind keine Änderungen möglich.');
@@ -343,34 +413,23 @@ async function saveStock(event) {
   } catch (error) {
     feedback.textContent = error.message;
   } finally {
-    button.disabled = cancel.disabled = false;
+    stockBusy = false;
+    updateStockActions();
   }
 }
 
 async function deleteStock(entry) {
+  if (offline) throw new Error('Offline sind keine Änderungen möglich.');
   if (!confirm('Diese Bestandsposition entfernen? Das Produkt bleibt im Katalog erhalten.')) return;
   const deleted = await rest('stock_entries',
     `?id=eq.${encodeURIComponent(entry.id)}&updated_at=eq.${encodeURIComponent(entry.updated_at)}`,
     { method: 'DELETE', headers: { Prefer: 'return=representation' } });
-  await refresh();
-  if (!deleted?.length) status('Position wurde zwischenzeitlich geändert oder entfernt. Bitte erneut versuchen.');
-}
-
-async function showDetails(item) {
-  const version = ++detailVersion;
-  document.querySelector('#detail-name').textContent = item.name;
-  document.querySelector('#detail-code').textContent = item.qr_code;
-  document.querySelector('#item-qr').replaceChildren();
-  const gallery = document.querySelector('#detail-images');
-  gallery.replaceChildren();
-  const detail = document.querySelector('#detail-dialog');
-  if (!detail.open) detail.showModal();
-  try {
-    await renderQR(document.querySelector('#item-qr'), item.qr_code);
-  } catch {
-    status('QR-Erzeugung ist noch nicht offline verfügbar. Der Artikelcode wird als Text angezeigt.');
+  if (!deleted?.length) {
+    await refresh();
+    throw new Error('Position wurde zwischenzeitlich geändert oder entfernt. Bitte erneut versuchen.');
   }
-  await loadProductImages(item, gallery, () => version === detailVersion && detail.open);
+  stockDialog().close();
+  await refresh();
 }
 
 export async function loadProductImages(item, gallery, isCurrent, runAction = (handler) => handler()) {
@@ -394,6 +453,8 @@ export async function loadProductImages(item, gallery, isCurrent, runAction = (h
       if (offline) throw new Error('Offline sind keine Änderungen möglich.');
       if (!confirm('Dieses Bild löschen?')) return;
       await removeImage(image);
+      previewPaths = null;
+      previewURLs.clear();
       figure.remove();
     }), 'danger');
     remove.disabled = offline || (gallery.id === 'editor-images' && editorBusy);
@@ -408,8 +469,8 @@ export async function initInventory() {
     offline = true;
     document.querySelector('#add-item').disabled = true;
     document.querySelector('#add-stock').disabled = true;
-    document.querySelectorAll('#detail-images button').forEach((button) => { button.disabled = true; });
     updateEditorActions();
+    updateStockActions();
     render();
   });
   const syncView = () => setView(location.hash === '#catalog' ? 'catalog' : 'stock');
@@ -423,6 +484,19 @@ export async function initInventory() {
   document.querySelector('#delete-item').addEventListener('click', () =>
     editorAction(() => deleteItem(editingItem)));
   document.querySelector('#cancel-stock').addEventListener('click', () => stockDialog().close());
+  document.querySelector('#delete-stock').addEventListener('click', async () => {
+    stockBusy = true;
+    updateStockActions();
+    try {
+      await deleteStock(stockEditingEntry);
+    } catch (error) {
+      if (stockDialog().open) document.querySelector('#stock-status').textContent = error.message;
+      else status(error.message);
+    } finally {
+      stockBusy = false;
+      updateStockActions();
+    }
+  });
   dialog().addEventListener('cancel', (event) => {
     if (editorBusy) event.preventDefault();
   });
@@ -431,12 +505,7 @@ export async function initInventory() {
     document.querySelector('#editor-images').replaceChildren();
   });
   stockDialog().addEventListener('cancel', (event) => {
-    if (stockForm().querySelector('[type=submit]').disabled) event.preventDefault();
-  });
-  document.querySelector('#close-detail').addEventListener('click', () => document.querySelector('#detail-dialog').close());
-  document.querySelector('#detail-dialog').addEventListener('close', () => {
-    detailVersion++;
-    document.querySelector('#detail-images').replaceChildren();
+    if (stockBusy) event.preventDefault();
   });
   form().addEventListener('submit', saveItem);
   stockForm().addEventListener('submit', saveStock);

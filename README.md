@@ -254,11 +254,19 @@ Die SQL- und Edge-Quelldateien dürfen öffentlich sein, enthalten aber keine Se
    Über **Einlagern** Bestandspositionen mit Lagerort, Stückzahl
    und optionalem Gesamtgewicht hinzufügen. Dasselbe Produkt kann gleichzeitig
    in mehreren Kühltruhen liegen. Die Ansicht **Bestand** zeigt nur eingelagerte
-   Positionen. Beim Entfernen einer Position bleibt das Produkt erhalten;
+   Positionen, gruppiert nach Kategorie und darin alphabetisch nach Produktname.
+   Jede Karte zeigt genau ein Vorschaubild (das erste Produktbild), Name,
+   Zubereitungszeit, Vorbereitungszeit, Gesamtgewicht dieser Position und Ort/Fach.
+   Die Vorbereitungszeit entspricht ausschließlich der gespeicherten Auftauzeit;
+   ist sie unbekannt, bleibt die Angabe leer. Stückzahlen und weitere Angaben
+   stehen im Positionsdialog, den ein Klick auf den Namen öffnet. Dort lässt sich
+   die Position auch entfernen. Ohne Foto oder bei Bildladefehlern erscheint ein
+   Hinweis statt eines Bildes. Private Vorschaubilder sind nur online verfügbar;
+   signierte URLs werden ausschließlich kurzzeitig im Arbeitsspeicher gehalten.
+   Beim Entfernen einer Position bleibt das Produkt erhalten;
    das endgültige Löschen eines Produkts entfernt dagegen auch dessen Bestände
-   und Bilder. In der Bestandsansicht sind unter **Bilder & QR** Produktbilder
-   und der Produkt-QR sichtbar.
-   QR-Codes lassen sich mit der Druckfunktion des Browsers ausgeben.
+   und Bilder. Produktbilder werden im Bearbeitungsdialog des Produktkatalogs
+   verwaltet; die kompakte Bestandsansicht enthält keine Bilder-/QR-Aktionsbuttons.
 3. Unter **Geräte → Neues Gerät verbinden** einen Join-Code erzeugen. Das neue
    Gerät wählt **Inventar verbinden**, scannt den QR-Code oder gibt Inventar-ID
    und Code manuell ein und vergibt seinen Gerätenamen.

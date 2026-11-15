@@ -2,7 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 globalThis.document = { querySelector: () => null };
-const { hasStock, optionalInteger, stockValues, groupCatalog, productPackInfo, productStockLabel, loadProductImages } = await import('../js/inventory.js');
+const {
+  hasStock, optionalInteger, stockValues, groupCatalog, productPackInfo,
+  productStockLabel, loadProductImages, loadStockPreview,
+} = await import('../js/inventory.js');
 const { saveConnection, clearConnection, saveSnapshot, loadSnapshot } = await import('../js/auth.js');
 const { locationSelection, locationLabel } = await import('../js/locations.js');
 
@@ -45,6 +48,29 @@ test('Katalog bildet bei gefilterten und leeren Ergebnissen keine leeren Gruppen
   assert.deepEqual(groupCatalog(products.filter((item) => item.name === 'Lachs')),
     [{ category: 'Fisch', items: [products[1]] }]);
   assert.deepEqual(groupCatalog([]), []);
+});
+
+test('Bestand gruppiert Positionen nach Produktkategorie und erhält mehrere Orte pro Produkt', () => {
+  const products = new Map([
+    ['z', { name: 'Zander', category: 'Fisch' }],
+    ['l', { name: 'Lachs', category: 'Fisch' }],
+    ['a', { name: 'Apfel', category: 'Obst' }],
+    ['n', { name: 'Ohne', category: '' }],
+  ]);
+  const entries = [
+    { id: '1', item_id: 'a', location_id: 'cellar' },
+    { id: '2', item_id: 'z', location_id: 'cellar' },
+    { id: '3', item_id: 'l', location_id: 'kitchen' },
+    { id: '4', item_id: 'l', location_id: 'cellar' },
+    { id: '5', item_id: 'n', location_id: 'cellar' },
+  ];
+  assert.deepEqual(groupCatalog(entries, (entry) => products.get(entry.item_id)).map((group) => ({
+    category: group.category, ids: group.items.map((entry) => entry.id),
+  })), [
+    { category: 'Fisch', ids: ['3', '4', '2'] },
+    { category: 'Obst', ids: ['1'] },
+    { category: '', ids: ['5'] },
+  ]);
 });
 
 test('Katalog zeigt nur Packungsangaben aus eigenen Notizzeilen ohne Zahlenumwandlung', () => {
@@ -109,6 +135,59 @@ test('Produktbilder werden signiert angezeigt; veraltete Dialog-Ladevorgänge ä
   invalidateOnSign = true;
   await loadProductImages({ id: 'product' }, gallery, () => current);
   assert.equal(gallery.children.length, 0);
+});
+
+test('Bestandsvorschau zeigt nur das erste Bild, teilt Anfragen und meldet Ladefehler', async (t) => {
+  saveConnection({ inventoryId: '11111111-1111-4111-8111-111111111111', deviceId: 'test', deviceToken: 'test' });
+  const previousDocument = globalThis.document;
+  const node = () => ({
+    children: [], textContent: '',
+    replaceChildren(...children) { this.children = children; },
+    addEventListener() {},
+  });
+  globalThis.document = { querySelector: () => null, createElement: node };
+  t.after(() => { globalThis.document = previousDocument; clearConnection(); });
+  let metadataCalls = 0;
+  const signedPaths = [];
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    let response;
+    if (url.includes('/functions/v1/imageStorage')) {
+      const { path } = JSON.parse(options.body);
+      signedPaths.push(path);
+      if (path === 'broken.webp') throw new Error('Testfehler');
+      response = { signedURL: `https://example.invalid/${path}` };
+    } else {
+      metadataCalls++;
+      response = new URL(url).searchParams.get('offset') === '0' ? [
+        { item_id: 'fish', path: 'first.webp' },
+        { item_id: 'fish', path: 'second.webp' },
+        { item_id: 'broken', path: 'broken.webp' },
+      ] : [];
+    }
+    return new Response(JSON.stringify(response), { status: 200 });
+  });
+  const first = node();
+  const second = node();
+  await Promise.all([
+    loadStockPreview({ id: 'fish', name: 'Fisch' }, first, () => true),
+    loadStockPreview({ id: 'fish', name: 'Fisch' }, second, () => true),
+  ]);
+  assert.equal(first.children.length, 1);
+  assert.equal(first.children[0].src, 'https://example.invalid/first.webp');
+  assert.equal(first.children[0].alt, 'Fisch');
+  assert.equal(second.children.length, 1);
+  assert.deepEqual(signedPaths, ['first.webp']);
+  assert.equal(metadataCalls, 2);
+  const missing = node();
+  await loadStockPreview({ id: 'missing' }, missing, () => true);
+  assert.equal(missing.textContent, 'Kein Bild');
+  const broken = node();
+  await loadStockPreview({ id: 'broken' }, broken, () => true);
+  assert.match(broken.textContent, /Bild nicht verfügbar: Testfehler/);
+  const stale = node();
+  stale.textContent = 'Neuer Inhalt';
+  await loadStockPreview({ id: 'fish' }, stale, () => false);
+  assert.equal(stale.textContent, 'Neuer Inhalt');
 });
 
 test('Stückzahl, Gesamtgewicht und Zeiten beachten Grenzen und optionale Werte', () => {

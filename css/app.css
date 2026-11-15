@@ -31,13 +31,21 @@ textarea { min-height: 80px; resize: vertical; }
 .card { background: white; border: 1px solid #cfe0e1; border-radius: 1rem; padding: 1.2rem; margin-block: 1rem; box-shadow: 0 2px 6px #17343a08; overflow-wrap: anywhere; }
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 1rem; }
 .grid .card { margin: 0; }
-.catalog-category { grid-column: 1 / -1; min-width: 0; }
-.catalog-category .card h3 { font-size: 1.25rem; overflow-wrap: anywhere; }
+.category-group { grid-column: 1 / -1; min-width: 0; }
+.category-group .card h3 { font-size: 1.25rem; overflow-wrap: anywhere; }
 .catalog-card { padding: .85rem; }
 .catalog-card h3 { margin: 0 0 .4rem; }
 .catalog-card p { margin: 0 0 .65rem; }
 .compact-actions { gap: .4rem; }
 .compact-actions button { padding: .4rem .65rem; font-size: .875rem; }
+.stock-card { display: flex; align-items: start; gap: .85rem; padding: .85rem; }
+.stock-preview { flex: 0 0 96px; width: 96px; min-height: 96px; overflow-wrap: anywhere; font-size: .8rem; color: #49666c; }
+.stock-preview img { display: block; width: 96px; height: 96px; object-fit: contain; border-radius: .4rem; }
+.stock-info { min-width: 0; }
+.stock-info h3 { margin: 0 0 .4rem; }
+.stock-info p { margin: .25rem 0; }
+.stock-name { background: none; color: var(--accent); padding: 0; text-align: left; overflow-wrap: anywhere; }
+.stock-name:hover { text-decoration: underline; }
 .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 .muted { color: #49666c; }
 .quantity { font-weight: 700; font-size: 1.3rem; padding: 0 .5rem; }
