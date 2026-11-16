@@ -78,7 +78,10 @@ Ein Klick auf den Namen öffnet den Positionsdialog mit:
 - **Position entfernen**, **Speichern** und **Schließen**.
 
 Fehlende Zubereitungs- und Auftauzeiten werden in Übersicht und Dialog samt
-Beschriftung ausgeblendet; 0 Minuten bleibt sichtbar. Im Dialog erscheinen Teile
+Beschriftung ausgeblendet. In den Übersichtskarten entfallen außerdem
+Zubereitungszeit und Packungsgewicht bei 0; fehlendes Packungsgewicht wird dort
+ebenfalls nicht angezeigt. Auftauzeit 0 und im Dialog Zubereitungszeit 0 bleiben
+sichtbar. Im Dialog erscheinen Teile
 nur mit Inhalt, Favorit nur bei Ja und Rating nur mit Bewertung (auch 0).
 Der Nutzungscounter wird im Bestand nicht angezeigt. Bei genügend Platz stehen
 Mengensteuerung, **Umlagern** und **Weiteren Bestand erfassen** nebeneinander;

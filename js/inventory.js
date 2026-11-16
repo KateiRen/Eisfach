@@ -80,6 +80,15 @@ export function stockTimeLabels(item = {}) {
   };
 }
 
+export function stockCardLabels(item = {}) {
+  const times = stockTimeLabels(item);
+  return [
+    Number(item.preparation_minutes) > 0 ? times.preparation : '',
+    times.thawing,
+    Number(item.weight_grams) > 0 ? `Gewicht pro Packung: ${productWeightLabel(item)}` : '',
+  ].filter(Boolean);
+}
+
 export function filterByProductNumber(products, query) {
   const number = query.trim().toLocaleLowerCase('de');
   return products.filter((item) => (item.product_number || '').toLocaleLowerCase('de').includes(number));
@@ -233,8 +242,7 @@ function render() {
     edit.disabled = offline;
     heading.append(edit);
     info.append(heading,
-      ...Object.values(stockTimeLabels(item)).filter(Boolean).map((text) => element('p', text)),
-      element('p', `Gewicht pro Packung: ${productWeightLabel(item)}`),
+      ...stockCardLabels(item).map((text) => element('p', text)),
       element('p', `Ort: ${label(entry)}`));
     card.append(preview, info);
     previews.push({ item, preview });

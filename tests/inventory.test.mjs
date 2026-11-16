@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 globalThis.document = { querySelector: () => null };
 const {
   hasStock, matchesProduct, optionalInteger, optionalWeight, stockValues, groupCatalog, productPackInfo,
-  productWeightLabel, filterByProductNumber, stockTimeLabels,
+  productWeightLabel, filterByProductNumber, stockTimeLabels, stockCardLabels,
   productStockLabel, loadProductImages, loadStockPreview, createAdditionalPosition, scheduleStockPreviews,
 } = await import('../js/inventory.js');
 const { uploadImage } = await import('../js/storage.js');
@@ -210,6 +210,17 @@ test('Bestandszeiten lassen fehlende Angaben weg und erhalten 0 sowie die Stunde
     { preparation: 'Zubereitungszeit: 15 Min.', thawing: '' });
   assert.deepEqual(stockTimeLabels({ thawing_minutes: 90 }),
     { preparation: '', thawing: 'Auftauzeit: 1 Std. 30 Min.' });
+});
+
+test('Bestandskarten blenden leere und 0-Zubereitungszeiten und Packungsgewichte samt Beschriftung aus', () => {
+  assert.deepEqual(stockCardLabels(), []);
+  for (const value of [null, '', 0, '0', '0.000']) {
+    assert.deepEqual(stockCardLabels({ preparation_minutes: value, weight_grams: value }), []);
+  }
+  assert.deepEqual(stockCardLabels({ preparation_minutes: 15, weight_grams: '500.125', thawing_minutes: 90 }),
+    ['Zubereitungszeit: 15 Min.', 'Auftauzeit: 1 Std. 30 Min.', 'Gewicht pro Packung: 500,125 g']);
+  assert.deepEqual(stockCardLabels({ preparation_minutes: 0, weight_grams: '0.001', thawing_minutes: 0 }),
+    ['Auftauzeit: 0 Min.', 'Gewicht pro Packung: 0,001 g']);
 });
 
 test('Katalogbestand summiert Stückzahlen über Orte und ignoriert alte Gewichte ohne Stückzahl', () => {
