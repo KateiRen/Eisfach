@@ -1,13 +1,15 @@
 import { rest, list } from './supabase.js';
 import { loadConnection, saveSnapshot, loadSnapshot } from './auth.js';
-import { uploadImage, imageURL, removeImage } from './storage.js';
+import { imageURL } from './storage.js';
 import { element, action, status } from './app.js';
 import { locationLabel, populateCompartments, locationSelection } from './locations.js';
 import { loadSorting, compareOrder, orderRecords, orderStockPositions } from './ordering.js';
-import { productDetails, productNumberSearch, thawingTimeLabel, optionalInteger, optionalWeight, optionalPrice, priceLabel } from './product.js';
+import { productDetails, thawingTimeLabel, optionalInteger, optionalWeight, priceLabel } from './product.js';
 import { reorderProduct, receiveOrder } from './orders.js';
+import { initProductEditor, editItem, updateEditorActions } from './product-editor.js';
 
 export { optionalInteger, optionalWeight } from './product.js';
+export { loadProductImages } from './product-editor.js';
 
 let items = [];
 let stockEntries = [];
@@ -21,10 +23,6 @@ let renderVersion = 0;
 let previewPaths = null;
 let previewObserver = null;
 const previewURLs = new Map();
-let editingVersion = null;
-let editingItem = null;
-let editorBusy = false;
-let editorImageVersion = 0;
 let stockEditingVersion = null;
 let stockEditingEntry = null;
 let stockBusy = false;
@@ -33,7 +31,6 @@ let stockAction = null;
 let stockCreatingId = null;
 let receivingOrder = null;
 let returnToOrders = false;
-const form = () => document.querySelector('#item-form');
 const dialog = () => document.querySelector('#item-dialog');
 const stockForm = () => document.querySelector('#stock-form');
 const stockDialog = () => document.querySelector('#stock-dialog');
@@ -397,150 +394,6 @@ function setView(view) {
   render();
 }
 
-function updateProductNumberSearch() {
-  const search = productNumberSearch(form().elements.product_number.value);
-  const container = document.querySelector('#item-number-search');
-  const link = container.querySelector('a');
-  container.hidden = !search;
-  if (search) {
-    link.textContent = search.label;
-    link.href = search.href;
-  } else {
-    link.textContent = '';
-    link.removeAttribute('href');
-  }
-}
-
-async function editItem(item) {
-  const version = ++editorImageVersion;
-  editingItem = item || null;
-  editingVersion = item?.updated_at || null;
-  form().reset();
-  for (const key of ['id', 'name', 'product_number', 'price', 'weight_grams', 'description', 'category', 'notes', 'preparation_minutes', 'thawing_minutes']) {
-    form().elements[key].value = item?.[key] ?? '';
-  }
-  updateProductNumberSearch();
-  const details = productDetails(item || {});
-  form().elements.product_url.value = details.product_url ?? '';
-  form().elements.parts.value = details.parts ?? '';
-  form().elements.favorite.checked = details.favorite === true;
-  form().elements.rating.value = details.rating ?? '';
-  document.querySelector('#item-usage-count').textContent = String(details.usage_count);
-  document.querySelector('#editor-title').textContent = item ? 'Produkt bearbeiten' : 'Produkt anlegen';
-  document.querySelector('#editor-status').textContent = '';
-  updateEditorActions();
-  const gallery = document.querySelector('#editor-images');
-  gallery.replaceChildren();
-  dialog().showModal();
-  if (!item) return;
-  const isCurrent = () => version === editorImageVersion && dialog().open;
-  try {
-    await loadProductImages(item, gallery, isCurrent, editorAction);
-  } catch (error) {
-    if (isCurrent()) gallery.replaceChildren(element('p', `Bilder konnten nicht geladen werden: ${error.message}`));
-  }
-}
-
-function updateEditorActions() {
-  form().querySelector('[type=submit]').disabled = editorBusy || offline;
-  document.querySelector('#cancel-item').disabled = editorBusy;
-  const remove = document.querySelector('#delete-item');
-  remove.hidden = !editingItem;
-  remove.disabled = editorBusy || offline;
-  document.querySelectorAll('#editor-images button').forEach((button) => {
-    button.disabled = editorBusy || offline;
-  });
-}
-
-async function editorAction(handler) {
-  editorBusy = true;
-  updateEditorActions();
-  document.querySelector('#editor-status').textContent = '';
-  try {
-    await handler();
-  } catch (error) {
-    if (dialog().open) document.querySelector('#editor-status').textContent = error.message;
-    else status(error.message);
-  } finally {
-    editorBusy = false;
-    updateEditorActions();
-  }
-}
-
-async function saveItem(event) {
-  event.preventDefault();
-  editorBusy = true;
-  updateEditorActions();
-  const feedback = document.querySelector('#editor-status');
-  feedback.textContent = 'Wird gespeichert …';
-  try {
-    if (offline) throw new Error('Offline sind keine Änderungen möglich.');
-    const fields = Object.fromEntries(new FormData(form()));
-    const id = fields.id || crypto.randomUUID();
-    const creating = !fields.id;
-    const body = Object.fromEntries(['name', 'product_number', 'description', 'category', 'notes']
-      .map((key) => [key, fields[key].trim()]));
-    body.preparation_minutes = optionalInteger(fields.preparation_minutes);
-    body.thawing_minutes = optionalInteger(fields.thawing_minutes);
-    body.weight_grams = optionalWeight(fields.weight_grams);
-    body.price = optionalPrice(fields.price);
-    const details = productDetails({
-      product_url: fields.product_url.trim(), parts: fields.parts.trim() || null,
-      favorite: form().elements.favorite.checked,
-      rating: fields.rating === '' ? null : Number(fields.rating),
-    });
-    const { usage_count, ...editableDetails } = details;
-    Object.assign(body, editableDetails);
-    if (!body.name) throw new Error('Ein Name ist erforderlich.');
-    if (creating) {
-      body.id = id;
-      body.inventory_id = loadConnection().inventoryId;
-      body.qr_code = `eisfach:item:${id}`;
-    }
-    const versionFilter = editingVersion ? `&updated_at=eq.${encodeURIComponent(editingVersion)}` : '';
-    const saved = await rest('items', creating ? '' : `?id=eq.${id}${versionFilter}`, {
-      method: creating ? 'POST' : 'PATCH', body, headers: { Prefer: 'return=representation' },
-    });
-    if (!saved.length) {
-      await refresh();
-      throw new Error('Artikel wurde zwischenzeitlich geändert oder entfernt. Bitte schließen und erneut öffnen.');
-    }
-    // Nach erfolgreichem Artikel-Insert bei einem Bildfehler keinen zweiten Artikel erzeugen.
-    form().elements.id.value = id;
-    editingVersion = saved[0].updated_at;
-    editingItem = saved[0];
-    const files = [...form().elements.images.files];
-    for (let index = 0; index < files.length; index++) {
-      await uploadImage(id, files[index], index);
-    }
-    form().elements.images.value = '';
-    await refresh();
-    if (stockDialog().open) {
-      const product = items.find((item) => item.id === id);
-      if (!product) throw new Error('Das Produkt wurde gespeichert, konnte aber nicht neu geladen werden. Bitte die Seite neu laden.');
-      stockForm().elements.product_number_search.value = product.product_number;
-      populateStockProducts(id);
-    }
-    dialog().close();
-  } catch (error) {
-    feedback.textContent = `${error.message} Bereits gespeicherte Artikeldaten bleiben erhalten; bei teilweisem Bildupload bitte schließen und Bilder prüfen.`;
-  } finally {
-    editorBusy = false;
-    updateEditorActions();
-  }
-}
-
-async function deleteItem(item) {
-  if (offline) throw new Error('Offline sind keine Änderungen möglich.');
-  if (!confirm(`Produkt „${item.name}“ unwiderruflich löschen? Alle zugehörigen Bestandspositionen, Bestelllisteneinträge und Bilder werden ebenfalls gelöscht.`)) return;
-  const images = await list('item_images', `?item_id=eq.${item.id}&select=*&order=id.asc`);
-  // Objekte vor dem Artikel löschen, solange die Storage-Policy dessen Existenz prüfen kann.
-  for (const image of images) await removeImage(image);
-  await rest('items', `?id=eq.${item.id}`, { method: 'DELETE' });
-  dialog().close();
-  await refresh();
-}
-
 function editStock(entry, itemId) {
   stockEditingEntry = entry || null;
   stockEditingVersion = entry?.updated_at || null;
@@ -768,39 +621,23 @@ async function deleteStock(entry) {
   await refresh();
 }
 
-export async function loadProductImages(item, gallery, isCurrent, runAction = (handler) => handler()) {
-  if (!isCurrent()) return;
-  gallery.replaceChildren();
-  if (offline) {
-    gallery.append(element('p', 'Private Bilder sind nur online verfügbar.'));
-    return;
-  }
-  const images = await list('item_images', `?item_id=eq.${item.id}&select=*&order=sort_order.asc,created_at.asc,id.asc`);
-  if (!isCurrent()) return;
-  for (const image of images) {
-    const url = await imageURL(image.path);
-    if (!isCurrent()) return;
-    const figure = element('figure');
-    const img = element('img');
-    img.src = url;
-    img.alt = image.caption || item.name;
-    img.loading = 'lazy';
-    const remove = action('Bild löschen', () => runAction(async () => {
-      if (offline) throw new Error('Offline sind keine Änderungen möglich.');
-      if (!confirm('Dieses Bild löschen?')) return;
-      await removeImage(image);
+export async function initInventory() {
+  initProductEditor({
+    isOffline: () => offline,
+    onChange: async (saved) => {
+      await refresh();
+      if (saved && stockDialog().open) {
+        const product = items.find((item) => item.id === saved.id);
+        if (!product) throw new Error('Das Produkt wurde gespeichert, konnte aber nicht neu geladen werden. Bitte die Seite neu laden.');
+        stockForm().elements.product_number_search.value = product.product_number;
+        populateStockProducts(product.id);
+      }
+    },
+    onImagesChanged: () => {
       previewPaths = null;
       previewURLs.clear();
-      figure.remove();
-    }), 'danger');
-    remove.disabled = offline || (gallery.id === 'editor-images' && editorBusy);
-    figure.append(img, remove);
-    gallery.append(figure);
-  }
-  if (!images.length) gallery.append(element('p', 'Noch keine Bilder. Bilder unter „Bearbeiten“ hinzufügen.'));
-}
-
-export async function initInventory() {
+    },
+  });
   window.addEventListener('offline', () => {
     offline = true;
     document.querySelector('#add-item').disabled = true;
@@ -845,16 +682,11 @@ export async function initInventory() {
   });
   document.querySelector('#stock-new-item').addEventListener('click', async () => {
     try {
-      await editItem();
-      form().elements.product_number.value = stockForm().elements.product_number_search.value.trim();
-      updateProductNumberSearch();
+      await editItem(null, stockForm().elements.product_number_search.value.trim());
     } catch (error) {
       document.querySelector('#stock-status').textContent = error.message;
     }
   });
-  document.querySelector('#cancel-item').addEventListener('click', () => dialog().close());
-  document.querySelector('#delete-item').addEventListener('click', () =>
-    editorAction(() => deleteItem(editingItem)));
   document.querySelector('#cancel-stock').addEventListener('click', () => stockDialog().close());
   document.querySelector('#delete-stock').addEventListener('click', async () => {
     stockBusy = true;
@@ -869,12 +701,7 @@ export async function initInventory() {
       updateStockActions();
     }
   });
-  dialog().addEventListener('cancel', (event) => {
-    if (editorBusy) event.preventDefault();
-  });
   dialog().addEventListener('close', () => {
-    editorImageVersion++;
-    document.querySelector('#editor-images').replaceChildren();
     if (returnToOrders) location.assign('./orders.html');
   });
   stockDialog().addEventListener('cancel', (event) => {
@@ -888,8 +715,6 @@ export async function initInventory() {
   stockActionDialog().addEventListener('cancel', (event) => {
     if (stockBusy) event.preventDefault();
   });
-  form().addEventListener('submit', saveItem);
-  form().elements.product_number.addEventListener('input', updateProductNumberSearch);
   stockForm().addEventListener('submit', saveStock);
   stockForm().elements.location_id.addEventListener('change', () => {
     populateCompartments(stockForm().elements.compartment_id, compartments,

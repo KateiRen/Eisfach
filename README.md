@@ -71,8 +71,10 @@ Fehlende Stückpreise werden als „—“ angezeigt und verhindern die Berechnu
 des Totals, statt als 0 Euro einzugehen. Kostenlose Produkte mit Preis 0
 werden dagegen regulär berücksichtigt. Auf schmalen Bildschirmen ist die
 Tabelle seitlich scrollbar.
-**Produkt aktualisieren** öffnet den Produkteditor für Preis und Produktdaten;
-nach Speichern oder Schließen kehrt die App zur Bestellliste zurück.
+**Produkt aktualisieren** öffnet den vollständigen Produkteditor als Dialog
+direkt über der Bestellliste, ohne Seitenwechsel. Speichern aktualisiert
+Produktdaten, Preise und Total in der darunterliegenden Liste; Schließen
+verwirft ungespeicherte Eingaben.
 **Einlagern** öffnet die Bestandserfassung mit der offenen Bestellmenge als
 Vorgabe. Ort/Fach auswählen und gegebenenfalls eine kleinere Teilmenge eingeben.
 Speichern legt atomar eine Bestandsposition an und zieht die Menge von der
@@ -362,6 +364,7 @@ Eine atomare Aktualisierung aller offenen Tabs ist derzeit nicht implementiert.
 | [js/app.js](./js/app.js) | Navigation, Seitenstart und Geräteprüfung |
 | [js/inventory.js](./js/inventory.js) | Produktkatalog, Positionen und Dialoge |
 | [js/product.js](./js/product.js) | Gemeinsame Produktfeldvalidierung und Auftauzeitformat |
+| [js/product-editor.js](./js/product-editor.js) | Gemeinsamer Produktdialog für Katalog und Bestellliste |
 | [js/supabase.js](./js/supabase.js), [js/auth.js](./js/auth.js) | API-Client, lokale Verbindung und Lesekopie |
 | [js/setup.js](./js/setup.js), [js/devices.js](./js/devices.js) | Inventaranlage, Kopplung und Geräteverwaltung |
 | [js/locations.js](./js/locations.js), [js/freezer.js](./js/freezer.js) | Orts-/Fachauswahl und Verwaltung |

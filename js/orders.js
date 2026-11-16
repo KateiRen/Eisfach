@@ -1,6 +1,7 @@
 import { rest, list } from './supabase.js';
 import { element, action, status } from './app.js';
 import { optionalPrice, priceLabel } from './product.js';
+import { initProductEditor, editItem, updateEditorActions } from './product-editor.js';
 
 let busy = false;
 let available = false;
@@ -87,7 +88,7 @@ async function refresh() {
   updateControls();
   const [entries, products] = await Promise.all([
     list('order_entries', '?select=*&order=created_at.asc,id.asc'),
-    list('items', '?select=id,name,product_number,price&order=name.asc,id.asc'),
+    list('items', '?select=id,name,product_number,price,category&order=name.asc,id.asc'),
   ]);
   const byId = new Map(products.map((item) => [item.id, item]));
   if (entries.some((entry) => !byId.has(entry.item_id))) {
@@ -115,9 +116,7 @@ async function refresh() {
     quantity.append(control);
     const actions = element('td');
     const buttons = element('div', undefined, 'actions compact-actions');
-    const edit = action('Produkt aktualisieren', () => {
-      location.assign(`./app.html?edit-product=${encodeURIComponent(item.id)}#catalog`);
-    });
+    const edit = action('Produkt aktualisieren', () => editProduct(item.id));
     const store = action('Einlagern', () => {
       location.assign(`./app.html?receive-order=${encodeURIComponent(entry.id)}#catalog`);
     });
@@ -135,7 +134,17 @@ async function refresh() {
   document.querySelector('#order-price-note').hidden = totals.total !== null;
   document.querySelector('#order-table').hidden = entries.length === 0;
   document.querySelector('#empty-orders').hidden = entries.length > 0;
+  const categories = [...new Set(products.map((item) => item.category).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'de'));
+  document.querySelector('#categories').replaceChildren(...categories.map((category) => new Option(category)));
   available = true;
+}
+
+async function editProduct(itemId) {
+  if (!available || !navigator.onLine) throw new Error('Produkte sind nur online änderbar. Bitte aktualisieren.');
+  const products = await rest('items', `?id=eq.${encodeURIComponent(itemId)}&select=*`);
+  if (products?.length !== 1) throw new Error('Produkt nicht mehr verfügbar. Bitte die Bestellliste aktualisieren.');
+  await editItem(products[0]);
 }
 
 async function runChange(entry, quantity) {
@@ -176,10 +185,21 @@ async function reload() {
 }
 
 export async function initOrders() {
+  initProductEditor({
+    isOffline: () => !available || !navigator.onLine,
+    onChange: async () => {
+      try {
+        await refresh();
+      } finally {
+        updateControls();
+      }
+    },
+  });
   document.querySelector('#reload-orders').addEventListener('click', reload);
   window.addEventListener('offline', () => {
     available = false;
     updateControls();
+    updateEditorActions();
     status('Offline: Die geladene Bestellliste ist nur lesbar.');
   });
   window.addEventListener('online', updateControls);

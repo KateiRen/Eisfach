@@ -5,6 +5,7 @@ globalThis.document = { querySelector: () => null };
 const { orderQuantity, reorderProduct, changeOrder, orderAmounts, orderAmountLabel,
   steppedOrderQuantity, receiveOrder } = await import('../js/orders.js');
 const { saveConnection, clearConnection } = await import('../js/auth.js');
+const { initProductEditor, editItem } = await import('../js/product-editor.js');
 const storage = new Map();
 globalThis.localStorage = {
   getItem: (key) => storage.get(key) ?? null,
@@ -120,4 +121,85 @@ test('Nachbestellen nutzt atomare RPC; Mengenänderung und Entfernen prüfen den
     globalThis.fetch = original;
     clearConnection();
   }
+});
+
+test('Gemeinsamer Produktdialog bearbeitet vollständige Daten und meldet Speichern an die aktuelle Seite', async (t) => {
+  saveConnection({ inventoryId: '11111111-1111-4111-8111-111111111111', deviceId: 'd', deviceToken: 't' });
+  t.after(clearConnection);
+  const node = () => ({
+    textContent: '', hidden: false, disabled: false, children: [], listeners: {},
+    addEventListener(name, handler) { this.listeners[name] = handler; },
+    replaceChildren(...children) { this.children = children; },
+    querySelector() { return this.link; },
+    removeAttribute() {},
+  });
+  const nodes = new Map(['main', '#item-dialog', '#item-form', '#cancel-item', '#delete-item',
+    '#item-number-search', '#item-usage-count', '#editor-title', '#editor-status', '#editor-images']
+    .map((key) => [key, node()]));
+  const form = nodes.get('#item-form');
+  form.elements = Object.fromEntries(['id', 'name', 'product_number', 'price', 'weight_grams', 'description',
+    'category', 'notes', 'preparation_minutes', 'thawing_minutes', 'product_url', 'parts', 'favorite',
+    'rating', 'images'].map((key) => [key, { ...node(), value: '', checked: false, files: [] }]));
+  form.reset = () => {};
+  const submit = node();
+  form.querySelector = () => submit;
+  const dialog = nodes.get('#item-dialog');
+  dialog.showModal = () => { dialog.open = true; };
+  dialog.close = () => { dialog.open = false; };
+  const search = nodes.get('#item-number-search');
+  search.link = node();
+  nodes.get('main').insertAdjacentHTML = () => {};
+  const previousDocument = globalThis.document;
+  const previousFormData = globalThis.FormData;
+  t.after(() => {
+    globalThis.document = previousDocument;
+    globalThis.FormData = previousFormData;
+  });
+  globalThis.document = {
+    querySelector: (selector) => nodes.get(selector),
+    querySelectorAll: () => [],
+    createElement: node,
+  };
+  globalThis.FormData = class {
+    *[Symbol.iterator]() {
+      for (const [key, field] of Object.entries(form.elements)) yield [key, field.value];
+    }
+  };
+  const item = {
+    id: 'product', name: 'Fisch', product_number: '00123', price: 4.99, weight_grams: 500,
+    category: 'Fisch', description: 'Beschreibung erhalten', notes: 'Notizen erhalten',
+    preparation_minutes: 10, thawing_minutes: 90, product_url: 'https://example.org/fisch',
+    parts: '2 Beutel', favorite: true, rating: 5, usage_count: 7, updated_at: 'version-1',
+  };
+  const saved = { ...item, price: 6.49, updated_at: 'version-2' };
+  let patched;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (options.method === 'PATCH') {
+      assert.ok(url.includes('updated_at=eq.version-1'));
+      patched = JSON.parse(options.body);
+      return Response.json([saved]);
+    }
+    return Response.json([]);
+  });
+  let changed;
+  initProductEditor({ isOffline: () => false, onChange: async (product) => { changed = product; } });
+  await editItem(item);
+  assert.equal(dialog.open, true);
+  assert.equal(form.elements.description.value, item.description);
+  assert.equal(form.elements.parts.value, item.parts);
+  assert.equal(form.elements.favorite.checked, true);
+  assert.equal(form.elements.rating.value, 5);
+  assert.equal(nodes.get('#item-usage-count').textContent, '7');
+  assert.equal(search.link.href, 'https://www.bofrost.de/search?text=00123&searchType=product');
+  for (const field of Object.values(form.elements)) field.value = String(field.value);
+  form.elements.price.value = '6,49';
+  await form.listeners.submit({ preventDefault() {} });
+  assert.equal(patched.price, 6.49);
+  assert.equal(patched.description, item.description);
+  assert.equal(patched.notes, item.notes);
+  assert.equal(patched.parts, item.parts);
+  assert.equal(patched.product_url, item.product_url);
+  assert.equal(patched.usage_count, undefined);
+  assert.deepEqual(changed, saved);
+  assert.equal(dialog.open, false);
 });
