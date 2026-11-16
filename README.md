@@ -65,7 +65,7 @@ gruppiert nach Produktkategorie und Produktname. Mehrere Positionen desselben
 Produkts sind erlaubt, auch am gleichen Ort. Die Anzahl in der Kategorieüberschrift
 zählt Produkte, nicht Positionen.
 
-Jede Karte zeigt erstes Produktbild, Name, Zeiten, Gewicht pro Packung und Ort/Fach.
+Jede Karte zeigt erstes Produktbild, Name, vorhandene Zeiten, Gewicht pro Packung und Ort/Fach.
 Ein Klick auf den Namen öffnet den Positionsdialog mit:
 
 - Produktname als Überschrift, Produktnummer als kleinem Untertitel;
@@ -76,6 +76,13 @@ Ein Klick auf den Namen öffnet den Positionsdialog mit:
 - **Weiteren Bestand erfassen**: zusätzliche positive Stückzahl sowie Ort/Fach
   wählen und sofort als neue Position speichern;
 - **Position entfernen**, **Speichern** und **Schließen**.
+
+Fehlende Zubereitungs- und Auftauzeiten werden in Übersicht und Dialog samt
+Beschriftung ausgeblendet; 0 Minuten bleibt sichtbar. Im Dialog erscheinen Teile
+nur mit Inhalt, Favorit nur bei Ja und Rating nur mit Bewertung (auch 0).
+Der Nutzungscounter wird im Bestand nicht angezeigt. Bei genügend Platz stehen
+Mengensteuerung, **Umlagern** und **Weiteren Bestand erfassen** nebeneinander;
+auf schmalen Bildschirmen werden sie umgebrochen.
 
 Umlagern und zusätzliche Erfassung haben eigene Bestätigungsdialoge.
 Eine ungespeicherte Stückzahländerung im Hauptdialog bleibt dabei erhalten.

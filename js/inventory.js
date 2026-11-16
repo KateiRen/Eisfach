@@ -73,6 +73,13 @@ export function productPackInfo(item = {}) {
   return { parts, weight: productWeightLabel(item) };
 }
 
+export function stockTimeLabels(item = {}) {
+  return {
+    preparation: item.preparation_minutes == null ? '' : `Zubereitungszeit: ${item.preparation_minutes} Min.`,
+    thawing: item.thawing_minutes == null ? '' : `Auftauzeit: ${thawingTimeLabel(item.thawing_minutes)}`,
+  };
+}
+
 export function filterByProductNumber(products, query) {
   const number = query.trim().toLocaleLowerCase('de');
   return products.filter((item) => (item.product_number || '').toLocaleLowerCase('de').includes(number));
@@ -226,8 +233,7 @@ function render() {
     edit.disabled = offline;
     heading.append(edit);
     info.append(heading,
-      element('p', `Zubereitungszeit: ${item.preparation_minutes != null ? `${item.preparation_minutes} Min.` : '—'}`),
-      element('p', `Auftauzeit: ${thawingTimeLabel(item.thawing_minutes)}`),
+      ...Object.values(stockTimeLabels(item)).filter(Boolean).map((text) => element('p', text)),
       element('p', `Gewicht pro Packung: ${productWeightLabel(item)}`),
       element('p', `Ort: ${label(entry)}`));
     card.append(preview, info);
@@ -252,11 +258,19 @@ function render() {
   scheduleStockPreviews(previews, () => version === renderVersion);
 }
 
-function appendProductDetails(container, item) {
+function appendProductDetails(container, item, stock = false) {
   const details = productDetails(item);
-  const favorite = details.favorite === null ? '—' : details.favorite ? 'Ja' : 'Nein';
-  container.append(element('p', `Favorit: ${favorite} · Rating: ${details.rating === null ? '—' : `${details.rating}/5`}`, 'muted'),
-    element('p', `Nutzungscounter: ${details.usage_count}`, 'muted'));
+  if (stock) {
+    if (details.parts?.trim()) container.append(element('p', `Teile: ${details.parts}`));
+    const labels = [];
+    if (details.favorite) labels.push('Favorit: Ja');
+    if (details.rating !== null) labels.push(`Rating: ${details.rating}/5`);
+    if (labels.length) container.append(element('p', labels.join(' · '), 'muted'));
+  } else {
+    const favorite = details.favorite === null ? '—' : details.favorite ? 'Ja' : 'Nein';
+    container.append(element('p', `Favorit: ${favorite} · Rating: ${details.rating === null ? '—' : `${details.rating}/5`}`, 'muted'),
+      element('p', `Nutzungscounter: ${details.usage_count}`, 'muted'));
+  }
   if (details.product_url) {
     const link = element('a', 'Produktseite');
     link.href = details.product_url;
@@ -533,13 +547,14 @@ function updateStockProduct() {
   if (editing) {
     document.querySelector('#stock-subtitle').textContent = `Produktnummer: ${product?.product_number || '—'}`;
     document.querySelector('#stock-description').textContent = product?.description || 'Keine Beschreibung vorhanden.';
-    document.querySelector('#stock-preparation').textContent =
-      `Zubereitungszeit: ${product?.preparation_minutes != null ? `${product.preparation_minutes} Min.` : '—'}`;
-    document.querySelector('#stock-thawing').textContent =
-      `Auftauzeit: ${thawingTimeLabel(product?.thawing_minutes)}`;
+    for (const [name, text] of Object.entries(stockTimeLabels(product))) {
+      const field = document.querySelector(`#stock-${name}`);
+      field.textContent = text;
+      field.hidden = !text;
+    }
     const metadata = document.querySelector('#stock-product-metadata');
-    metadata.replaceChildren(element('p', `Teile: ${productPackInfo(product).parts}`));
-    appendProductDetails(metadata, product || {});
+    metadata.replaceChildren();
+    appendProductDetails(metadata, product || {}, true);
     updateStockLocation();
     const version = ++stockImageVersion;
     const preview = document.querySelector('#stock-detail-image');

@@ -97,17 +97,21 @@
           <p>Orte und Fächer unter <a href="./freezer.html">Einstellungen → Orte und Fächer</a> verwalten.</p>
         </div>
         <p id="stock-current-location" hidden></p>
-        <label id="stock-quantity-label" for="stock-quantity">Stückzahl</label>
-        <div class="quantity-control">
-          <button id="quantity-down" type="button" class="secondary" aria-label="Stückzahl verringern">-</button>
-          <input id="stock-quantity" name="quantity" type="number" min="0" max="2147483647" step="1" required value="1">
-          <button id="quantity-up" type="button" class="secondary" aria-label="Stückzahl erhöhen">+</button>
+        <div class="stock-quantity-actions">
+          <div class="stock-quantity">
+            <label id="stock-quantity-label" for="stock-quantity">Stückzahl</label>
+            <div class="quantity-control">
+              <button id="quantity-down" type="button" class="secondary" aria-label="Stückzahl verringern">-</button>
+              <input id="stock-quantity" name="quantity" type="number" min="0" max="2147483647" step="1" required value="1">
+              <button id="quantity-up" type="button" class="secondary" aria-label="Stückzahl erhöhen">+</button>
+            </div>
+          </div>
+          <div id="stock-position-actions" class="actions" hidden>
+            <button id="relocate-stock" type="button" class="secondary">Umlagern</button>
+            <button id="additional-stock" type="button" class="secondary">Weiteren Bestand erfassen</button>
+          </div>
         </div>
         <p id="stock-status" role="status"></p>
-        <div id="stock-position-actions" class="actions" hidden>
-          <button id="relocate-stock" type="button" class="secondary">Umlagern</button>
-          <button id="additional-stock" type="button" class="secondary">Weiteren Bestand erfassen</button>
-        </div>
         <div class="actions">
           <button id="delete-stock" type="button" class="danger" hidden>Position entfernen</button>
           <button type="submit">Speichern</button>

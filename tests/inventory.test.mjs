@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 globalThis.document = { querySelector: () => null };
 const {
   hasStock, matchesProduct, optionalInteger, optionalWeight, stockValues, groupCatalog, productPackInfo,
-  productWeightLabel, filterByProductNumber,
+  productWeightLabel, filterByProductNumber, stockTimeLabels,
   productStockLabel, loadProductImages, loadStockPreview, createAdditionalPosition, scheduleStockPreviews,
 } = await import('../js/inventory.js');
 const { uploadImage } = await import('../js/storage.js');
@@ -198,6 +198,18 @@ test('Produktnummernfilter erhält führende Nullen und sucht Teiltreffer nur im
   assert.deepEqual(filterByProductNumber(products, ' '), products);
   assert.deepEqual(filterByProductNumber(products, '999'), []);
   assert.equal(matchesProduct({ name: 'Fisch', product_number: '00123' }, '00123', ''), true);
+});
+
+test('Bestandszeiten lassen fehlende Angaben weg und erhalten 0 sowie die Stundenanzeige', () => {
+  assert.deepEqual(stockTimeLabels(), { preparation: '', thawing: '' });
+  assert.deepEqual(stockTimeLabels({ preparation_minutes: null, thawing_minutes: null }),
+    { preparation: '', thawing: '' });
+  assert.deepEqual(stockTimeLabels({ preparation_minutes: 0, thawing_minutes: 0 }),
+    { preparation: 'Zubereitungszeit: 0 Min.', thawing: 'Auftauzeit: 0 Min.' });
+  assert.deepEqual(stockTimeLabels({ preparation_minutes: 15 }),
+    { preparation: 'Zubereitungszeit: 15 Min.', thawing: '' });
+  assert.deepEqual(stockTimeLabels({ thawing_minutes: 90 }),
+    { preparation: '', thawing: 'Auftauzeit: 1 Std. 30 Min.' });
 });
 
 test('Katalogbestand summiert Stückzahlen über Orte und ignoriert alte Gewichte ohne Stückzahl', () => {
