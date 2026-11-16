@@ -1,6 +1,32 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { productDetails, productURL, thawingTimeLabel } from '../js/product.js';
+import { productDetails, productNumberSearch, productURL, thawingTimeLabel } from '../js/product.js';
+
+test('Produktnummernsuche verlinkt 3 bis 6 Ziffern bei bofrost und erhält führende Nullen', () => {
+  for (const number of ['001', '1234', '11620', '012345']) {
+    assert.deepEqual(productNumberSearch(` ${number} `), {
+      label: 'Suche bei bofrost',
+      href: `https://www.bofrost.de/search?text=${number}&searchType=product`,
+    });
+  }
+});
+
+test('EAN-Suche verlinkt genau 8 oder 13 Ziffern bei Open Food Facts', () => {
+  for (const number of ['12345670', '00123457', '3017624010701', '0012345678905']) {
+    assert.deepEqual(productNumberSearch(number), {
+      label: 'Suche nach EAN',
+      href: `https://world.openfoodfacts.org/product/${number}`,
+    });
+  }
+});
+
+test('Andere Längen, leere und nicht rein numerische Produktnummern bieten keine Suche an', () => {
+  assert.equal(productNumberSearch(), null);
+  for (const number of ['', ' ', '1', '12', '1234567', '123456789', '1234567890',
+    '12345678901', '123456789012', '12345678901234', 'AB123', '12-34', '12 34', '+123', '１２３']) {
+    assert.equal(productNumberSearch(number), null, number);
+  }
+});
 
 test('Neue Produktfelder erhalten optionale Werte, Rating 0 und getrennte Teile', () => {
   assert.deepEqual(productDetails({}), {

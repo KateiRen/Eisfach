@@ -1,3 +1,20 @@
+export function productNumberSearch(value = '') {
+  const number = value.trim();
+  if (/^\d{3,6}$/.test(number)) {
+    return {
+      label: 'Suche bei bofrost',
+      href: `https://www.bofrost.de/search?text=${number}&searchType=product`,
+    };
+  }
+  if (/^(?:\d{8}|\d{13})$/.test(number)) {
+    return {
+      label: 'Suche nach EAN',
+      href: `https://world.openfoodfacts.org/product/${number}`,
+    };
+  }
+  return null;
+}
+
 export function productURL(value) {
   if (value === null || value === undefined || value === '') return null;
   if (typeof value !== 'string') throw new Error('Die Produktseite muss eine HTTP-/HTTPS-URL sein.');
