@@ -1,4 +1,4 @@
--- Run as postgres against a disposable database after schema.sql or the migration.
+-- Run as postgres against a disposable database initialized with schema.sql.
 begin;
 
 insert into public.inventories(id, name) values
