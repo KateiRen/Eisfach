@@ -63,7 +63,14 @@ Jeder Klick setzt ein Stück zusätzlich auf die gemeinsame, inventargebundene
 **Bestellliste** im Header/Menü. Pro Produkt gibt es genau einen Eintrag;
 gleichzeitige Klicks verschiedener Geräte werden atomar addiert.
 In der Bestellliste lassen sich positive ganze Stückzahlen speichern und
-Einträge entfernen. Der aktuelle Packungspreis wird angezeigt.
+Einträge entfernen. Die Ansicht ist immer eine kompakte Tabelle mit Produkt,
+Menge, aktuellem Stückpreis und Gesamtpreis pro Position. Unter der
+Gesamtpreis-Spalte steht das **Total** aller Positionen. Die Berechnung erfolgt
+centgenau anhand der gespeicherten Mengen; Mengenänderungen zuerst speichern.
+Fehlende Stückpreise werden als „—“ angezeigt und verhindern die Berechnung
+des Totals, statt als 0 Euro einzugehen. Kostenlose Produkte mit Preis 0
+werden dagegen regulär berücksichtigt. Auf schmalen Bildschirmen ist die
+Tabelle seitlich scrollbar.
 Bestand und Nutzungscounter bleiben unverändert; eine Einlagerung erfolgt
 weiterhin separat. Die Bestellliste benötigt Internet und lässt sich über
 **Aktualisieren** neu laden. Bei unklarer Netzwerkantwort vor einem erneuten

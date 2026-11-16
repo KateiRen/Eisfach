@@ -17,7 +17,30 @@
     <p id="status" role="status"></p>
     <p>Produkte über „Nachbestellen“ in der <a href="./app.html#catalog">Produktliste</a> hinzufügen. Änderungen hier verändern nicht den Bestand.</p>
     <button id="reload-orders" type="button" class="secondary">Aktualisieren</button>
-    <div id="orders" class="grid"></div>
+    <div id="orders" class="order-list" role="region" aria-label="Bestellpositionen" tabindex="0">
+      <table id="order-table" class="order-table" hidden>
+        <caption>Bestellpositionen mit gespeicherten Mengen und aktuellen Preisen</caption>
+        <thead>
+          <tr>
+            <th scope="col">Produkt</th>
+            <th scope="col">Menge</th>
+            <th scope="col" class="order-price">Stückpreis</th>
+            <th scope="col" class="order-price">Gesamtpreis</th>
+            <th scope="col">Aktionen</th>
+          </tr>
+        </thead>
+        <tbody id="order-rows"></tbody>
+        <tfoot>
+          <tr>
+            <th scope="row" colspan="3">Total</th>
+            <td id="order-total" class="order-price"></td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    <p id="empty-orders" hidden>Die Bestellliste ist leer.</p>
+    <p id="order-price-note" class="muted" hidden>Mindestens ein Stückpreis fehlt. Ohne diesen Preis kann das Total nicht berechnet werden.</p>
   </main>
 </body>
 </html>

@@ -1,9 +1,25 @@
 import { rest, list } from './supabase.js';
 import { element, action, status } from './app.js';
-import { priceLabel } from './product.js';
+import { optionalPrice, priceLabel } from './product.js';
 
 let busy = false;
 let available = false;
+
+export function orderAmounts(rows) {
+  const amounts = rows.map(({ price, quantity }) => {
+    const unitPrice = optionalPrice(price);
+    return unitPrice === null ? null : BigInt(Math.round(unitPrice * 100)) * BigInt(orderQuantity(quantity));
+  });
+  return {
+    amounts,
+    total: amounts.some((amount) => amount === null) ? null : amounts.reduce((sum, amount) => sum + amount, 0n),
+  };
+}
+
+export function orderAmountLabel(cents) {
+  return cents === null ? '—'
+    : `${(cents / 100n).toLocaleString('de-DE')},${String(cents % 100n).padStart(2, '0')}\u00a0€`;
+}
 
 export function orderQuantity(value) {
   const quantity = Number(value);
@@ -53,10 +69,16 @@ async function refresh() {
   if (entries.some((entry) => !byId.has(entry.item_id))) {
     throw new Error('Ein Produkt ist nicht mehr verfügbar. Bitte die Bestellliste aktualisieren.');
   }
-  const cards = entries.map((entry) => {
+  const totals = orderAmounts(entries.map((entry) => ({
+    price: byId.get(entry.item_id).price, quantity: entry.quantity,
+  })));
+  const rows = entries.map((entry, index) => {
     const item = byId.get(entry.item_id);
-    const card = element('section', undefined, 'card');
-    const label = element('label', 'Bestellmenge');
+    const row = element('tr');
+    const product = element('th', item.name);
+    product.scope = 'row';
+    product.append(element('span', item.product_number || '—', 'muted'));
+    const quantity = element('td');
     const input = element('input');
     input.type = 'number';
     input.min = '1';
@@ -65,19 +87,25 @@ async function refresh() {
     input.required = true;
     input.value = entry.quantity;
     input.setAttribute('aria-label', `Bestellmenge: ${item.name}`);
-    label.append(input);
-    const buttons = element('div', undefined, 'actions');
-    buttons.append(
-      action('Menge speichern', () => runChange(entry, input.value)),
-      action('Entfernen', () => runChange(entry, null), 'danger'),
-    );
-    card.append(element('h2', item.name),
-      element('p', `Produktnummer: ${item.product_number || '—'}`, 'muted'),
-      element('p', `Preis pro Packung: ${priceLabel(item.price)}`), label, buttons);
-    return card;
+    quantity.append(input);
+    const actions = element('td');
+    const buttons = element('div', undefined, 'actions compact-actions');
+    const save = action('Speichern', () => runChange(entry, input.value));
+    const remove = action('Entfernen', () => runChange(entry, null), 'danger');
+    save.setAttribute('aria-label', `Menge speichern: ${item.name}`);
+    remove.setAttribute('aria-label', `Entfernen: ${item.name}`);
+    buttons.append(save, remove);
+    actions.append(buttons);
+    row.append(product, quantity, element('td', priceLabel(item.price), 'order-price'),
+      element('td', orderAmountLabel(totals.amounts[index]), 'order-price'), actions);
+    return row;
   });
-  document.querySelector('#orders').replaceChildren(
-    ...(cards.length ? cards : [element('p', 'Die Bestellliste ist leer.')]));
+  document.querySelector('#order-rows').replaceChildren(
+    ...rows);
+  document.querySelector('#order-total').textContent = orderAmountLabel(totals.total);
+  document.querySelector('#order-price-note').hidden = totals.total !== null;
+  document.querySelector('#order-table').hidden = entries.length === 0;
+  document.querySelector('#empty-orders').hidden = entries.length > 0;
   available = true;
 }
 

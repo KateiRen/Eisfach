@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 globalThis.document = { querySelector: () => null };
-const { orderQuantity, reorderProduct, changeOrder } = await import('../js/orders.js');
+const { orderQuantity, reorderProduct, changeOrder, orderAmounts, orderAmountLabel } = await import('../js/orders.js');
 const { saveConnection, clearConnection } = await import('../js/auth.js');
 const storage = new Map();
 globalThis.localStorage = {
@@ -17,6 +17,32 @@ test('Bestellmengen erlauben nur positive ganze Stückzahlen im Integer-Bereich'
   for (const invalid of ['', ' ', 0, -1, 1.5, '1e2', 2147483648, null, undefined, true]) {
     assert.throws(() => orderQuantity(invalid), /Bestellmenge/);
   }
+});
+
+test('Positionspreise und Total rechnen centgenau mit gespeicherten Mengen, auch über dem sicheren Number-Bereich', () => {
+  const result = orderAmounts([
+    { price: '0.10', quantity: 3 },
+    { price: 4.99, quantity: 2 },
+    { price: 0, quantity: 5 },
+  ]);
+  assert.deepEqual(result, { amounts: [30n, 998n, 0n], total: 1028n });
+  assert.equal(orderAmountLabel(result.total), '10,28\u00a0€');
+  const large = orderAmounts([{ price: '99999999.99', quantity: 2147483647 }]);
+  assert.equal(large.total, 21474836467852516353n);
+  assert.equal(orderAmountLabel(large.total), '214.748.364.678.525.163,53\u00a0€');
+  assert.deepEqual(orderAmounts([]), { amounts: [], total: 0n });
+});
+
+test('Fehlende Preise sind keine kostenlosen Produkte und verhindern ein unvollständiges Total', () => {
+  const result = orderAmounts([
+    { price: null, quantity: 2 }, { price: undefined, quantity: 1 },
+    { price: '4.99', quantity: 3 }, { price: 0, quantity: 1 },
+  ]);
+  assert.deepEqual(result, { amounts: [null, null, 1497n, 0n], total: null });
+  assert.equal(orderAmountLabel(result.total), '—');
+  assert.equal(orderAmountLabel(0n), '0,00\u00a0€');
+  assert.throws(() => orderAmounts([{ price: '1.999', quantity: 1 }]), /Preis/);
+  assert.throws(() => orderAmounts([{ price: '1.99', quantity: 0 }]), /Bestellmenge/);
 });
 
 test('Nachbestellen nutzt atomare RPC; Mengenänderung und Entfernen prüfen den Änderungsstand', async () => {

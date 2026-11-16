@@ -107,6 +107,17 @@ body[data-page="bulk-edit"] main { max-width: none; }
 .bulk-table textarea { min-width: 24rem; min-height: 10rem; }
 .bulk-row-status { min-width: 14rem; }
 .bulk-row-error { background: #fff1d2; }
+.order-list { overflow-x: auto; margin-top: 1rem; }
+.order-table { width: 100%; border-collapse: collapse; background: white; }
+.order-table caption { text-align: left; font-size: .875rem; margin-bottom: .5rem; color: #49666c; }
+.order-table th, .order-table td { padding: .5rem; text-align: left; border-bottom: 1px solid #cfe0e1; }
+.order-table tbody th { min-width: 10rem; overflow-wrap: anywhere; }
+.order-table tbody th span { display: block; font-size: .8rem; font-weight: 400; }
+.order-table input { width: 5.5rem; margin: 0; padding: .5rem; }
+.order-table .order-price { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.order-table tfoot th { text-align: right; }
+.order-table tfoot th, .order-table tfoot td { border-top: 2px solid #8aafb2; font-weight: 700; }
+.order-table .actions { flex-wrap: nowrap; }
 #bulk-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
 .bulk-legend { font-weight: 600; margin-bottom: .75rem; }
 .quantity { font-weight: 700; font-size: 1.3rem; padding: 0 .5rem; }
