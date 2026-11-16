@@ -77,6 +77,18 @@ input[type="color"] { width: 100%; max-width: 12rem; height: 3rem; padding: .25r
 .sorting-row { padding: .4rem 0; overflow-wrap: anywhere; }
 .sorting-row .actions { margin-top: .25rem; }
 .columns { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.product-pack-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; }
+.product-pack-fields > label { min-width: 0; }
+.product-rating { border: 0; padding: 0; margin: 0 0 1rem; min-width: 0; }
+.product-rating legend { font-weight: 600; }
+.rating-stars { display: flex; }
+.rating-stars label { position: relative; margin: 0; cursor: pointer; }
+.rating-stars input { position: absolute; width: 1px; height: 1px; padding: 0; margin: 0; opacity: 0; }
+.rating-stars span { display: block; min-width: 44px; min-height: 44px; text-align: center; font-size: 2rem; color: #8aafb2; }
+.rating-stars label:has(input:checked) span, .rating-stars label:has(~ label input:checked) span { color: var(--accent-link); }
+.rating-stars input:focus-visible + span { outline: 3px solid #d78500; outline-offset: -3px; border-radius: .4rem; }
+.rating-options { display: flex; flex-wrap: wrap; gap: 1rem; }
+.rating-options label { margin: 0; }
 .muted { color: #49666c; }
 .quantity { font-weight: 700; font-size: 1.3rem; padding: 0 .5rem; }
 .quantity-control { display: flex; align-items: center; gap: .5rem; margin-bottom: 1rem; }

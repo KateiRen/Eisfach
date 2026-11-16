@@ -5,7 +5,7 @@ globalThis.document = { querySelector: () => null };
 const {
   hasStock, matchesProduct, optionalInteger, optionalWeight, stockValues, groupCatalog, productPackInfo,
   productWeightLabel, filterByProductNumber,
-  productStockLabel, productSearchURL, loadProductImages, loadStockPreview, createAdditionalPosition, scheduleStockPreviews,
+  productStockLabel, loadProductImages, loadStockPreview, createAdditionalPosition, scheduleStockPreviews,
 } = await import('../js/inventory.js');
 const { loadImageURL, uploadImage } = await import('../js/storage.js');
 const { saveConnection, clearConnection, saveSnapshot, loadSnapshot } = await import('../js/auth.js');
@@ -211,17 +211,6 @@ test('Katalogbestand summiert Stückzahlen über Orte und ignoriert alte Gewicht
   assert.equal(productStockLabel('fruit', entries), 'Kein Bestand');
   assert.equal(productStockLabel('empty', entries), 'Kein Bestand');
   assert.equal(productStockLabel('fish', [{ item_id: 'fish', quantity: 0, weight_grams: 0 }]), 'Kein Bestand');
-});
-
-test('Google Suche kombiniert die aktuellen Felder und kodiert Sonderzeichen als Suchtext', () => {
-  const url = new URL(productSearchURL(' 00123 ', ' Fisch & Chips #1 '));
-  assert.equal(url.origin, 'https://www.google.com');
-  assert.equal(url.pathname, '/search');
-  assert.equal(url.searchParams.get('q'), '00123 Fisch & Chips #1');
-  assert.equal(url.hash, '');
-  assert.equal(new URL(productSearchURL('', 'Lachs')).searchParams.get('q'), 'Lachs');
-  assert.equal(new URL(productSearchURL('00123', '')).searchParams.get('q'), '00123');
-  assert.throws(() => productSearchURL(' ', ''), /Produktnamen oder eine Produktnummer/);
 });
 
 test('Bild-URL wird ohne Geräte-Header, Cookies oder Referrer geladen und über den WebP-Upload gespeichert', async (t) => {

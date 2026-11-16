@@ -31,17 +31,30 @@
         <input name="id" type="hidden">
         <label>Name<input name="name" required maxlength="200"></label>
         <label>Produktnummer<input name="product_number" maxlength="100"></label>
-        <label>Produktseite (optional)<input name="product_url" type="url" placeholder="https://…"></label>
-        <label>Teile (optional)<input name="parts" type="text"></label>
-        <div class="columns">
-          <label>Favorit (optional)<select name="favorite"><option value="">Nicht angegeben</option><option value="true">Ja</option><option value="false">Nein</option></select></label>
-          <label>Rating (optional, 0–5)<input name="rating" type="number" min="0" max="5" step="1"></label>
-        </div>
-        <p>Nutzungscounter: <output id="item-usage-count">0</output></p>
-        <label>Gewicht pro Packung (g, optional)<input name="weight_grams" type="number" min="0" max="999999999.999" step="0.001"></label>
-        <label>Beschreibung<textarea name="description" maxlength="2000"></textarea></label>
         <label>Kategorie<input name="category" maxlength="100" list="categories"></label>
         <datalist id="categories"></datalist>
+        <label>Produktseite (optional)<input name="product_url" type="url" placeholder="https://…"></label>
+        <div class="columns product-pack-fields">
+          <label>Gewicht pro Packung (g, optional)<input name="weight_grams" type="number" min="0" max="999999999.999" step="0.001"></label>
+          <label>Teile (optional)<input name="parts" type="text"></label>
+        </div>
+        <label>Beschreibung<textarea name="description" maxlength="2000"></textarea></label>
+        <label class="checkbox-label"><input name="favorite" type="checkbox"> Favorit</label>
+        <fieldset class="product-rating">
+          <legend>Rating (optional, 0–5)</legend>
+          <div class="rating-stars">
+            <label><input name="rating" type="radio" value="1" aria-label="1 Stern"><span aria-hidden="true">★</span></label>
+            <label><input name="rating" type="radio" value="2" aria-label="2 Sterne"><span aria-hidden="true">★</span></label>
+            <label><input name="rating" type="radio" value="3" aria-label="3 Sterne"><span aria-hidden="true">★</span></label>
+            <label><input name="rating" type="radio" value="4" aria-label="4 Sterne"><span aria-hidden="true">★</span></label>
+            <label><input name="rating" type="radio" value="5" aria-label="5 Sterne"><span aria-hidden="true">★</span></label>
+          </div>
+          <div class="rating-options">
+            <label class="checkbox-label"><input name="rating" type="radio" value="0"> 0 Sterne</label>
+            <label class="checkbox-label"><input name="rating" type="radio" value="" checked> Keine Bewertung</label>
+          </div>
+        </fieldset>
+        <p>Nutzungscounter: <output id="item-usage-count">0</output></p>
         <div class="columns">
           <label>Zubereitungszeit (Minuten)<input name="preparation_minutes" type="number" min="0" max="2147483647" step="1"></label>
           <label>Auftauzeit (Minuten, optional)<input name="thawing_minutes" type="number" min="0" max="2147483647" step="1"></label>
@@ -50,10 +63,8 @@
         <div id="editor-images" class="images" aria-label="Vorhandene Produktbilder"></div>
         <div class="columns">
           <label>Bilder hinzufügen<input name="images" type="file" accept="image/*" multiple></label>
-          <label>Bild-URL<input name="image_url" type="url" placeholder="https://…" aria-describedby="image-url-help"></label>
+          <label>Bild-URL<input name="image_url" type="url" placeholder="https://…"></label>
         </div>
-        <a id="google-search" class="button secondary" href="https://www.google.com/search" target="_blank" rel="noopener noreferrer">Google Suche</a>
-        <p id="image-url-help">Eine direkte Bild-URL wird beim Speichern importiert. Die Bildquelle muss den Abruf im Browser erlauben (CORS).</p>
         <p>Bilder werden auf maximal 1600 Pixel verkleinert und als WebP gespeichert.</p>
         <p id="editor-status" role="status"></p>
         <div class="actions">

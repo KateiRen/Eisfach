@@ -84,14 +84,6 @@ export function productStockLabel(itemId, entries) {
   return `Bestand: ${quantity > 0 ? `${quantity} Stück · ` : ''}${positions}`;
 }
 
-export function productSearchURL(productNumber, name) {
-  const query = [productNumber.trim(), name.trim()].filter(Boolean).join(' ');
-  if (!query) throw new Error('Bitte für die Google Suche einen Produktnamen oder eine Produktnummer eingeben.');
-  const url = new URL('https://www.google.com/search');
-  url.searchParams.set('q', query);
-  return url.href;
-}
-
 export function optionalInteger(value) {
   if (value === '') return null;
   const number = Number(value);
@@ -397,12 +389,11 @@ async function editItem(item) {
   const details = productDetails(item || {});
   form().elements.product_url.value = details.product_url ?? '';
   form().elements.parts.value = details.parts ?? '';
-  form().elements.favorite.value = details.favorite === null ? '' : String(details.favorite);
+  form().elements.favorite.checked = details.favorite === true;
   form().elements.rating.value = details.rating ?? '';
   document.querySelector('#item-usage-count').textContent = String(details.usage_count);
   document.querySelector('#editor-title').textContent = item ? 'Produkt bearbeiten' : 'Produkt anlegen';
   document.querySelector('#editor-status').textContent = '';
-  updateGoogleSearch();
   updateEditorActions();
   const gallery = document.querySelector('#editor-images');
   gallery.replaceChildren();
@@ -414,16 +405,6 @@ async function editItem(item) {
   } catch (error) {
     if (isCurrent()) gallery.replaceChildren(element('p', `Bilder konnten nicht geladen werden: ${error.message}`));
   }
-}
-
-function updateGoogleSearch() {
-  const link = document.querySelector('#google-search');
-  const number = form().elements.product_number.value;
-  const name = form().elements.name.value;
-  const empty = !number.trim() && !name.trim();
-  link.setAttribute('aria-disabled', String(empty));
-  if (empty) link.removeAttribute('href');
-  else link.href = productSearchURL(number, name);
 }
 
 function updateEditorActions() {
@@ -471,7 +452,7 @@ async function saveItem(event) {
     body.weight_grams = optionalWeight(fields.weight_grams);
     const details = productDetails({
       product_url: fields.product_url.trim(), parts: fields.parts.trim() || null,
-      favorite: fields.favorite === '' ? null : fields.favorite === 'true',
+      favorite: form().elements.favorite.checked,
       rating: fields.rating === '' ? null : Number(fields.rating),
     });
     const { usage_count, ...editableDetails } = details;
@@ -797,17 +778,6 @@ export async function initInventory() {
   document.querySelector('#only-with-stock').addEventListener('change', render);
   document.querySelector('#compact-view').addEventListener('change', render);
   document.querySelector('#add-item').addEventListener('click', () => editItem());
-  for (const name of ['product_number', 'name']) {
-    form().elements[name].addEventListener('input', updateGoogleSearch);
-  }
-  document.querySelector('#google-search').addEventListener('click', (event) => {
-    try {
-      event.currentTarget.href = productSearchURL(form().elements.product_number.value, form().elements.name.value);
-    } catch (error) {
-      event.preventDefault();
-      document.querySelector('#editor-status').textContent = error.message;
-    }
-  });
   stockForm().elements.product_number_search.addEventListener('input', () => populateStockProducts());
   stockForm().elements.item_id.addEventListener('change', updateStockProduct);
   stockForm().elements.quantity.addEventListener('input', updateStockActions);

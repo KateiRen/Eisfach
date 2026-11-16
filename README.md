@@ -22,8 +22,11 @@ Datenbank, Geräteprüfung, private Bilder und serverseitige Funktionen.
 - Produkte mit Name, Produktnummer, Beschreibung, Kategorie, Notizen,
   Packungsgewicht, Zubereitungszeit und optionaler Auftauzeit verwalten.
   Zusätzlich gibt es eine optionale Produktseiten-URL (HTTP/HTTPS), ein eigenes
-  Textfeld **Teile**, einen optionalen **Favorit**-Status (Ja/Nein/nicht angegeben)
-  und ein optionales ganzzahliges **Rating von 0 bis 5**.
+  Textfeld **Teile**, eine **Favorit**-Checkbox und ein optionales ganzzahliges
+  **Rating von 0 bis 5** als auswählbare, entsprechend eingefärbte Sterne.
+  **0 Sterne** und **Keine Bewertung** bleiben getrennt auswählbar.
+  Ein bisher nicht angegebener Favorit wird als nicht angehakt angezeigt und
+  beim Speichern als Nein gespeichert.
 - Produktnummern sind Text: Führende Nullen bleiben erhalten; gleiche Nummern
   bei mehreren Produkten sind erlaubt.
 - Das Gewicht beschreibt **eine Packung**, nicht das Gesamtgewicht einer Position.
@@ -41,8 +44,9 @@ Datenbank, Geräteprüfung, private Bilder und serverseitige Funktionen.
   Produktseite, Favorit, Rating und Nutzungscounter sind ebenfalls sichtbar.
   Teile werden im eigenen Produktfeld gepflegt.
 - **Kompakte Ansicht** zeigt nur Name und Textaktionen, ohne Bildvorschauen.
-- Der Produkteditor verwaltet Bilder und bietet eine **Google Suche** aus
-  Produktnummer und Name. Bilder lassen sich als Datei oder direkte HTTP-/HTTPS-URL
+- Der Produkteditor zeigt Kategorie direkt nach Produktnummer, Gewicht und Teile
+  nebeneinander sowie Beschreibung vor Favorit und Rating.
+  Bilder lassen sich als Datei oder direkte HTTP-/HTTPS-URL
   hinzufügen. URL-Abrufe benötigen eine CORS-Freigabe der Bildquelle.
 - Produktlöschung entfernt auch zugehörige Positionen und Bilder.
 
