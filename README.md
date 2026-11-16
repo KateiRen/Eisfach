@@ -73,6 +73,32 @@ ebenfalls keine atomare Datenbanksicherung: Während Export und Import auf
 allen Geräten Änderungen pausieren. Die bestehende Datenbank vorher separat
 sichern. Nach einem Import die Bestands- und Produktliste neu laden.
 
+**Export inklusive Bilder** erstellt zusätzlich eine ZIP-Sicherung mit
+`inventory.json` und allen Produktbildern unter `images/`. Beschriftungen,
+Reihenfolge und Bildzuordnung sind enthalten, aber keine Gerätezugänge oder
+kurzlebigen signierten Downloadlinks. Die WebP-Dateien bleiben unverändert;
+ZIP verwendet STORE ohne zusätzliche Komprimierung und benötigt keine
+externe Bibliothek. Grenzen: 100 MB pro ZIP, 1999 Bilder, 5 MB pro Bild,
+10 MB für das JSON im Archiv. Für große Sammlungen entsprechend freien
+Browserspeicher vorhalten. Bei einem fehlgeschlagenen Bilddownload wird
+kein unvollständiges ZIP als erfolgreiche Sicherung heruntergeladen.
+
+Im selben Importdialog können unveränderte Eisfach-ZIP-Dateien ausgewählt
+werden. Archivstruktur, CRC-Prüfsummen, Bildmetadaten, WebP-Kopf und
+Produktverweise werden vor dem ersten Schreibzugriff geprüft. Andere ZIPs,
+ZIP64, verschlüsselte oder nachträglich neu komprimierte Archive werden
+ausdrücklich abgewiesen. Zuerst werden Produkte und Bestand importiert,
+danach Bilder mit ursprünglicher Beschriftung und Reihenfolge.
+Bild- und Datei-IDs werden wie Produkt-IDs für das Zielinventar stabil
+umgesetzt. Bestehende Bilder werden übersprungen, nicht ersetzt.
+Bei Fehlern bleiben auch bereits hochgeladene Bilddateien erhalten,
+damit derselbe Import fortgesetzt werden kann. Falls der Upload gelang,
+aber die Bildzuordnung scheiterte, prüft die Wiederholung den vorhandenen
+Dateiinhalt, bevor sie die Zuordnung ergänzt. Verwaiste Uploads bleiben
+bis zur erfolgreichen Wiederholung bestehen. JSON ohne Bilder bleibt
+weiterhin kompatibel. Keine zusätzliche SQL-Migration oder Veröffentlichung
+der Edge Functions ist erforderlich.
+
 ## Supabase einrichten
 
 1. Ein neues Supabase-Projekt erstellen. In dessen SQL Editor die vollständige

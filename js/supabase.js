@@ -28,7 +28,9 @@ export async function request(path, { method = 'GET', body, authenticated = true
       const error = await response.json();
       message = error.error || error.message || message;
     } catch { /* Nicht-JSON-Fehler, etwa vom Netzwerk-Proxy. */ }
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
   if (response.status === 204) return null;
   const text = await response.text();

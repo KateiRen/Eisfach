@@ -1,6 +1,8 @@
 import { list, rest } from './supabase.js';
 import { loadConnection } from './auth.js';
 import { status } from './app.js';
+import { createZip, readZip, MAX_ZIP_SIZE } from './zip.js';
+import { downloadImage, restoreImage, validateWebP } from './storage.js';
 
 const TABLES = ['storage_locations', 'storage_compartments', 'items', 'stock_entries'];
 const FIELDS = {
@@ -151,18 +153,117 @@ async function loadData() {
   return Object.fromEntries(TABLES.map((table, index) => [table, rows[index]]));
 }
 
+export function validateImageArchive(manifest, files) {
+  requireValue(manifest?.format === 'eisfach-zip' && manifest.version === 1, 'ZIP-Format nicht unterstützt.');
+  const data = validateBackup(manifest.data);
+  requireValue(Array.isArray(manifest.images), 'Bildverzeichnis fehlt.');
+  const products = new Set(data.items.map((item) => item.id));
+  const ids = new Set();
+  const paths = new Set();
+  const images = manifest.images.map((image) => {
+    requireValue(image && typeof image === 'object', 'Ungültiger Bildeintrag.');
+    const clean = pick(image, ['id', 'item_id', 'file_id', 'caption', 'sort_order']);
+    for (const field of ['id', 'item_id', 'file_id']) {
+      requireValue(typeof clean[field] === 'string' && UUID.test(clean[field]), `Bild: ${field} ist ungültig.`);
+      clean[field] = clean[field].toLowerCase();
+    }
+    requireValue(products.has(clean.item_id), 'Bild verweist auf fehlendes Produkt.');
+    requireValue(typeof clean.caption === 'string' && Number.isInteger(clean.sort_order) &&
+      clean.sort_order >= -2147483648 && clean.sort_order <= 2147483647, 'Bildbeschriftung oder Reihenfolge ist ungültig.');
+    const path = `${clean.item_id}/${clean.file_id}`;
+    requireValue(!ids.has(clean.id) && !paths.has(path), 'Doppeltes Bild.');
+    ids.add(clean.id);
+    paths.add(path);
+    const bytes = files.get(`images/${clean.id}.webp`);
+    requireValue(bytes instanceof Uint8Array, 'Bilddatei fehlt.');
+    validateWebP(bytes);
+    return clean;
+  });
+  requireValue(files.size === images.length + 1, 'Unerwartete Dateien im Archiv.');
+  return { data, images, files };
+}
+
+export async function createImageArchive(data, records, download, onProgress = () => {}) {
+  requireValue(records.length <= 1999, 'Maximal 1999 Bilder pro ZIP-Sicherung.');
+  const files = new Map();
+  const manifest = { format: 'eisfach-zip', version: 1, data, images: [] };
+  let totalSize = 0;
+  for (const record of records) {
+    const segments = record.path.split('/');
+    requireValue(segments.length === 3 && segments[0] === data.inventory_id &&
+      segments[1] === record.item_id && UUID.test(segments[2].slice(0, -5)) &&
+      segments[2].endsWith('.webp'), 'Ungültiger Bilderpfad.');
+    const image = { ...pick(record, ['id', 'item_id', 'caption', 'sort_order']),
+      file_id: segments[2].slice(0, -5) };
+    const bytes = await download(record.path);
+    validateWebP(bytes);
+    totalSize += bytes.length;
+    requireValue(totalSize <= MAX_ZIP_SIZE, 'ZIP-Sicherung ist größer als 100 MB.');
+    requireValue(!files.has(`images/${image.id}.webp`), 'Doppeltes Bild.');
+    files.set(`images/${image.id}.webp`, bytes);
+    manifest.images.push(image);
+    onProgress(manifest.images.length, records.length);
+  }
+  const json = new TextEncoder().encode(JSON.stringify(manifest, null, 2));
+  requireValue(json.length <= MAX_FILE_SIZE, 'JSON-Daten im ZIP sind größer als 10 MB.');
+  files.set('inventory.json', json);
+  validateImageArchive(manifest, files);
+  return createZip(files);
+}
+
+export function readImageArchive(bytes) {
+  const files = readZip(bytes);
+  const json = files.get('inventory.json');
+  requireValue(json.length <= MAX_FILE_SIZE, 'JSON-Daten im ZIP sind größer als 10 MB.');
+  return validateImageArchive(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(json)), files);
+}
+
+export async function importArchiveImages(archive, inventoryId, existing, upload, onProgress = () => {}) {
+  const known = new Map(existing.map((image) => [image.id, image]));
+  const knownPaths = new Set(existing.map((image) => image.path));
+  let added = 0;
+  let skipped = 0;
+  try {
+    for (const source of archive.images) {
+      const id = await importId(source.id, archive.data.inventory_id, inventoryId, 'item_images');
+      const itemId = await importId(source.item_id, archive.data.inventory_id, inventoryId, 'items');
+      const fileId = await importId(source.file_id, archive.data.inventory_id, inventoryId, 'image_files');
+      const path = `${inventoryId}/${itemId}/${fileId}.webp`;
+      if (known.has(id) && (known.get(id).item_id !== itemId || known.get(id).path !== path)) {
+        throw new Error('Ein vorhandenes Bild hat eine abweichende Zuordnung.');
+      }
+      if (known.has(id) || knownPaths.has(path)) skipped++;
+      else {
+        await upload({ id, item_id: itemId, inventory_id: inventoryId,
+          caption: source.caption, sort_order: source.sort_order },
+        archive.files.get(`images/${source.id}.webp`), fileId);
+        knownPaths.add(path);
+        added++;
+      }
+      onProgress(added, skipped);
+    }
+  } catch (error) {
+    throw new Error(`Bildimport abgebrochen: ${added} Bilder ergänzt, ${skipped} übersprungen. ` +
+      `Die Daten und bereits hochgeladenen Bilder bleiben erhalten. Dieselbe ZIP-Datei erneut importieren. ${error.message}`);
+  }
+  return { added, skipped };
+}
+
 export function initTransfer() {
   const exportButton = document.querySelector('#export-json');
+  const zipButton = document.querySelector('#export-zip');
   const importButton = document.querySelector('#import-json');
   const fileInput = document.querySelector('#import-file');
   const confirmation = document.querySelector('#import-confirm');
   const preview = document.querySelector('#import-preview');
   const form = document.querySelector('#import-form');
   let backup = null;
+  let archive = null;
   let busy = false;
   let fileRevision = 0;
   const update = () => {
     exportButton.disabled = busy || !navigator.onLine;
+    zipButton.disabled = busy || !navigator.onLine;
     importButton.disabled = busy || !backup || !confirmation.checked || !navigator.onLine;
     fileInput.disabled = confirmation.disabled = busy;
   };
@@ -172,44 +273,58 @@ export function initTransfer() {
   fileInput.addEventListener('change', async () => {
     const revision = ++fileRevision;
     backup = null;
+    archive = null;
     confirmation.checked = false;
     preview.textContent = 'Datei wird geprüft …';
     update();
     try {
       const file = fileInput.files[0];
       if (!file) { preview.textContent = 'Bitte eine Exportdatei auswählen.'; return; }
-      if (file.size > MAX_FILE_SIZE) throw new Error('Die Datei ist größer als 10 MB.');
-      const parsed = validateBackup(JSON.parse(await file.text()));
+      const zip = file.name.toLowerCase().endsWith('.zip');
+      if (file.size > (zip ? MAX_ZIP_SIZE : MAX_FILE_SIZE)) {
+        throw new Error(`Die Datei ist größer als ${zip ? '100' : '10'} MB.`);
+      }
+      const parsedArchive = zip ? readImageArchive(new Uint8Array(await file.arrayBuffer())) : null;
+      const parsed = parsedArchive ? parsedArchive.data : validateBackup(JSON.parse(await file.text()));
       if (revision !== fileRevision) return;
       backup = parsed;
+      archive = parsedArchive;
       preview.textContent = `${backup.items.length} Produkte, ${backup.stock_entries.length} Bestandspositionen, ` +
-        `${backup.storage_locations.length} Lagerorte, ${backup.storage_compartments.length} Fächer.`;
+        `${backup.storage_locations.length} Lagerorte, ${backup.storage_compartments.length} Fächer` +
+        (archive ? `, ${archive.images.length} Bilder.` : '.');
     } catch (error) {
       if (revision === fileRevision) preview.textContent = `Datei konnte nicht geladen werden: ${error.message}`;
     } finally { update(); }
   });
-  exportButton.addEventListener('click', async () => {
+  const runExport = async (withImages) => {
+    if (busy) return;
     busy = true;
     update();
     status('Daten werden für den Export abgerufen …');
     let url;
     try {
       const data = createBackup(await loadData(), loadConnection().inventoryId);
-      url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      const blob = withImages
+        ? await createImageArchive(data, await list('item_images', '?select=id,item_id,path,caption,sort_order&order=sort_order.asc,created_at.asc,id.asc'),
+          downloadImage, (count, total) => status(`Bilder werden exportiert: ${count} von ${total} …`))
+        : new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `eisfach-${new Date().toISOString().slice(0, 10)}.json`;
+      link.download = `eisfach-${new Date().toISOString().slice(0, 10)}.${withImages ? 'zip' : 'json'}`;
       document.body.append(link);
       link.click();
       link.remove();
-      status('JSON-Export zum Herunterladen bereitgestellt.');
+      status(`${withImages ? 'ZIP-Export inklusive Bilder' : 'JSON-Export'} zum Herunterladen bereitgestellt.`);
     } catch (error) { status(`Export fehlgeschlagen: ${error.message}`); }
     finally {
       if (url) setTimeout(() => URL.revokeObjectURL(url), 1000);
       busy = false;
       update();
     }
-  });
+  };
+  exportButton.addEventListener('click', () => runExport(false));
+  zipButton.addEventListener('click', () => runExport(true));
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     if (busy) return;
@@ -224,7 +339,21 @@ export function initTransfer() {
       const result = await importBackup(backup, loadConnection().inventoryId, await loadData(),
         (table, row) => rest(table, '', { method: 'POST', body: row }),
         (added, skipped) => status(`Import läuft: ${added} ergänzt, ${skipped} übersprungen …`));
-      status(`Import abgeschlossen: ${result.added} Datensätze ergänzt, ${result.skipped} übersprungen.`);
+      let images = null;
+      if (archive) {
+        status(`Daten importiert: ${result.added} ergänzt, ${result.skipped} übersprungen. Bilder werden vorbereitet …`);
+        try {
+          images = await importArchiveImages(archive, loadConnection().inventoryId,
+            await list('item_images', '?select=id,item_id,path&order=id.asc'), restoreImage,
+            (added, skipped) => status(`Daten importiert: ${result.added} ergänzt, ${result.skipped} übersprungen. ` +
+              `Bilder: ${added} ergänzt, ${skipped} übersprungen …`));
+        } catch (error) {
+          throw new Error(`Produkt-/Bestandsdaten bereits verarbeitet: ${result.added} ergänzt, ` +
+            `${result.skipped} übersprungen. ${error.message} ZIP-Import kann erneut versucht werden.`);
+        }
+      }
+      status(`Import abgeschlossen: ${result.added} Datensätze ergänzt, ${result.skipped} übersprungen.` +
+        (images ? ` ${images.added} Bilder ergänzt, ${images.skipped} übersprungen.` : ''));
       confirmation.checked = false;
     } catch (error) { status(`Import fehlgeschlagen: ${error.message}`); }
     finally { busy = false; update(); }

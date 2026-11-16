@@ -106,3 +106,67 @@ export async function imageURL(path) {
   const result = await edge('imageStorage', { action: 'sign', path });
   return result.signedURL;
 }
+
+export function validateWebP(bytes) {
+  const text = (start, end) => new TextDecoder().decode(bytes.subarray(start, end));
+  if (!(bytes instanceof Uint8Array) || bytes.length < 20 || bytes.length > 5 * 1024 * 1024 ||
+      text(0, 4) !== 'RIFF' || text(8, 12) !== 'WEBP' ||
+      !['VP8 ', 'VP8L', 'VP8X'].includes(text(12, 16)) ||
+      new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(4, true) !== bytes.length - 8) {
+    throw new Error('Ungültiges WebP-Bild (maximal 5 MB).');
+  }
+}
+
+export async function downloadImage(path) {
+  const url = await imageURL(path);
+  const response = await fetch(url, {
+    credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(30_000),
+  });
+  if (!response.ok) throw new Error(`Bild konnte nicht geladen werden (${response.status}).`);
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('Bildinhalt fehlt.');
+  const chunks = [];
+  let length = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      length += value.length;
+      if (length > 5 * 1024 * 1024) {
+        await reader.cancel();
+        throw new Error('Bild ist größer als 5 MB.');
+      }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+  validateWebP(bytes);
+  return bytes;
+}
+
+export async function restoreImage(image, bytes, fileId) {
+  validateWebP(bytes);
+  const path = `${image.inventory_id}/${image.item_id}/${fileId}.webp`;
+  try {
+    const saved = await request('/functions/v1/imageStorage', {
+      method: 'POST', body: new Blob([bytes], { type: 'image/webp' }),
+      headers: { 'Content-Type': 'image/webp', 'x-item-id': image.item_id, 'x-file-id': fileId },
+    });
+    if (saved.path !== path) throw new Error('Unerwarteter Bilderpfad beim Import.');
+  } catch (error) {
+    if (error.status !== 409) throw error;
+    const existing = await downloadImage(path);
+    if (existing.length !== bytes.length || existing.some((byte, index) => byte !== bytes[index])) {
+      throw new Error('Ein vorhandenes Bild hat abweichenden Inhalt. Es wurde nicht überschrieben.');
+    }
+  }
+  // Keep a completed upload on metadata failure so the same archive can resume safely.
+  await rest('item_images', '', {
+    method: 'POST', body: {
+      id: image.id, item_id: image.item_id, path, caption: image.caption, sort_order: image.sort_order,
+    },
+  });
+  return path;
+}
