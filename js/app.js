@@ -36,6 +36,7 @@ function initNavigation(page) {
   for (const [label, href, target] of [
     ['Bestand', './app.html#stock', 'stock'],
     ['Produktliste', './app.html#catalog', 'catalog'],
+    ['Bestellliste', './orders.html', 'orders'],
     ['Geräte', './devices.html', 'devices'],
     ['Orte und Fächer', './freezer.html', 'freezer'],
     ['Sortierung', './sorting.html', 'sorting'],
@@ -46,7 +47,8 @@ function initNavigation(page) {
     const link = element('a', label);
     link.href = href;
     link.dataset.navigation = target;
-    if (target === 'stock' || target === 'catalog') {
+    if (target === 'stock' || target === 'catalog' || target === 'orders') {
+      if (page === target) link.setAttribute('aria-current', 'page');
       links.append(link);
       const shortcut = link.cloneNode(true);
       shortcut.addEventListener('click', () => { menu.open = false; });
@@ -120,6 +122,7 @@ async function init() {
     }
   }
   if (page === 'inventory') await (await import('./inventory.js')).initInventory();
+  if (page === 'orders') await (await import('./orders.js')).initOrders();
   if (page === 'devices') await (await import('./devices.js')).initDevices();
   if (page === 'freezer') await (await import('./freezer.js')).initFreezer();
   if (page === 'sorting') await (await import('./sorting.js')).initSorting();

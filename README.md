@@ -21,6 +21,8 @@ Datenbank, Geräteprüfung, private Bilder und serverseitige Funktionen.
 
 - Produkte mit Name, Produktnummer, Beschreibung, Kategorie, Notizen,
   Packungsgewicht, Zubereitungszeit und optionaler Auftauzeit verwalten.
+  Der optionale **Preis pro Packung in Euro** erlaubt bis zu zwei Nachkommastellen
+  (Komma oder Punkt); leer bedeutet unbekannt, 0 bedeutet kostenlos.
   Zusätzlich gibt es eine optionale Produktseiten-URL (HTTP/HTTPS), ein eigenes
   Textfeld **Teile**, eine **Favorit**-Checkbox und ein optionales ganzzahliges
   **Rating von 0 bis 5** als auswählbare, entsprechend eingefärbte Sterne.
@@ -47,12 +49,25 @@ Datenbank, Geräteprüfung, private Bilder und serverseitige Funktionen.
   Packungsgewicht, summierten Bestand sowie **Bearbeiten** und **Einlagern**.
   Produktseite, Favorit, Rating und Nutzungscounter sind ebenfalls sichtbar.
   Teile werden im eigenen Produktfeld gepflegt.
-- **Kompakte Ansicht** zeigt nur Name und Textaktionen, ohne Bildvorschauen.
+- **Kompakte Ansicht** zeigt Name, Packungspreis und Textaktionen, ohne Bildvorschauen.
 - Der Produkteditor zeigt Kategorie direkt nach Produktnummer, Gewicht und Teile
   nebeneinander sowie Beschreibung vor Favorit und Rating.
   Bilder lassen sich als Dateien hinzufügen und werden ohne sichtbaren
   Dateinamen oder Titel unter dem Bild angezeigt.
-- Produktlöschung entfernt auch zugehörige Positionen und Bilder.
+- Produktlöschung entfernt auch zugehörige Positionen, Bestelleinträge und Bilder.
+
+### Bestellliste
+
+**Nachbestellen** steht nur im Produktkatalog bereit, auch in der kompakten Ansicht.
+Jeder Klick setzt ein Stück zusätzlich auf die gemeinsame, inventargebundene
+**Bestellliste** im Header/Menü. Pro Produkt gibt es genau einen Eintrag;
+gleichzeitige Klicks verschiedener Geräte werden atomar addiert.
+In der Bestellliste lassen sich positive ganze Stückzahlen speichern und
+Einträge entfernen. Der aktuelle Packungspreis wird angezeigt.
+Bestand und Nutzungscounter bleiben unverändert; eine Einlagerung erfolgt
+weiterhin separat. Die Bestellliste benötigt Internet und lässt sich über
+**Aktualisieren** neu laden. Bei unklarer Netzwerkantwort vor einem erneuten
+Klick die Bestellliste prüfen, damit nicht versehentlich doppelt bestellt wird.
 
 Der schreibgeschützte **Nutzungscounter** startet bei 0 und steigt um **1 pro
 neu erfasster Position** über **Einlagern** oder **Weiteren Bestand erfassen**,
@@ -106,7 +121,7 @@ Der Toolbar-Button **Produkt anlegen** steht nur in der Produktliste.
 
 ### Einstellungen
 
-**Bestand** und **Produktliste** sind direkt im Header und im Menü erreichbar.
+**Bestand**, **Produktliste** und **Bestellliste** sind direkt im Header und im Menü erreichbar.
 Unter **Menü → Einstellungen** stehen:
 
 | Bereich | Funktion |
@@ -157,7 +172,7 @@ Unter **Einstellungen → Export/Import**:
 
 | Format | Inhalt | Grenze |
 | --- | --- | --- |
-| JSON | Produkte, alle Bestandspositionen einschließlich Menge 0, Orte und Fächer | 10 MB |
+| JSON | Produkte einschließlich Preisen, alle Bestandspositionen einschließlich Menge 0, Bestellliste, Orte und Fächer | 10 MB |
 | ZIP: **Export inklusive Bilder** | Dieselben Daten und alle WebP-Bilder einschließlich Beschriftung, Reihenfolge und Produktzuordnung | 100 MB, höchstens 1999 Bilder |
 
 Nicht enthalten sind Gerätezugänge, Join-Codes, Auditprotokoll, persönliche
@@ -184,6 +199,10 @@ Ein fehlgeschlagener Bilddownload bricht den Export ab.
 
 Vorhandene Daten werden nicht geändert oder gelöscht; Mengen werden nicht addiert.
 Die neuen Produktfelder und der Nutzungscounter sind in JSON und ZIP enthalten.
+Packungspreise und Bestelleinträge sind ebenfalls enthalten. Alte Sicherungen
+ohne diese Angaben erhalten leere Preise und eine leere Bestellliste.
+Bereits auf der Bestellliste vorhandene Produkte werden beim Import übersprungen;
+Bestellmengen werden weder addiert noch überschrieben.
 Beim Import eines neuen Produkts wird dessen gesicherter Zähler übernommen;
 Bestandspositionen aus dem Import erhöhen ihn nicht zusätzlich. Bestehende
 Produkte und deren Zähler werden weiterhin übersprungen.
@@ -253,6 +272,14 @@ die Notizen bleiben erhalten. Bestehende Zähler starten bei 0; frühere
 Einlagerungen werden nicht geschätzt. Neue Datenbanken verwenden ausschließlich
 das vollständige Schema, nicht zusätzlich dieses Update.
 
+Für Preis und Bestellliste anschließend
+[update_product_orders.sql](./supabase/update_product_orders.sql) ebenfalls
+nach Sicherung und bei pausierten Schreibzugriffen **einmalig** ausführen,
+bevor die neue Oberfläche veröffentlicht wird. Voraussetzung ist der Stand
+nach dem obigen Metadaten-Update. Bereits auf diesem Stand befindliche
+Installationen benötigen nur dieses neue Update. Bestehende Produkte behalten
+einen leeren Preis; die Bestellliste beginnt leer.
+
 ### 2. Oberfläche bereitstellen
 
 Für GitHub Pages unter **Settings → Pages → Build and deployment**:
@@ -309,6 +336,7 @@ Eine atomare Aktualisierung aller offenen Tabs ist derzeit nicht implementiert.
 | --- | --- |
 | [index.html](./index.html), [setup.html](./setup.html) | Einstieg, Inventaranlage und Geräteverbindung |
 | [app.html](./app.html) | Bestand und Produktliste (`#stock`, `#catalog`) |
+| [orders.html](./orders.html), [js/orders.js](./js/orders.js) | Gemeinsame Bestellliste mit Mengenbearbeitung |
 | [devices.html](./devices.html), [freezer.html](./freezer.html) | Geräte sowie Orte und Fächer |
 | [sorting.html](./sorting.html), [appearance.html](./appearance.html), [transfer.html](./transfer.html) | Sortierung, Farben und Datenaustausch |
 | [js/app.js](./js/app.js) | Navigation, Seitenstart und Geräteprüfung |
@@ -374,6 +402,7 @@ psql "$env:TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase\tests\product_stock
 psql "$env:TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase\tests\storage_locations.sql
 psql "$env:TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase\tests\inventory_sorting.sql
 psql "$env:TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase\tests\item_metadata.sql
+psql "$env:TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase\tests\product_orders.sql
 ```
 
 Die SQL-Tests verwerfen ihre Testdaten per `ROLLBACK`. Für eine Freigabe zusätzlich

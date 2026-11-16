@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 globalThis.document = { querySelector: () => null };
 const { validateBackup, createBackup, importBackup } = await import('../js/transfer.js');
 const id = (number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
-const tables = ['storage_locations', 'storage_compartments', 'items', 'stock_entries'];
+const tables = ['storage_locations', 'storage_compartments', 'items', 'stock_entries', 'order_entries'];
 const empty = () => Object.fromEntries(tables.map((table) => [table, []]));
 const fixture = () => ({
   format: 'eisfach', version: 1, inventory_id: id(1),
@@ -104,7 +104,7 @@ test('Import in ein anderes Inventar ordnet alle Verweise zu und ist wiederholba
     existing[table].push(row);
   };
   assert.deepEqual(await importBackup(fixture(), id(10), existing, insert), { added: 4, skipped: 0 });
-  assert.deepEqual(writes, tables);
+  assert.deepEqual(writes, tables.filter((table) => table !== 'order_entries'));
   const [location] = existing.storage_locations;
   const [compartment] = existing.storage_compartments;
   const [product] = existing.items;
@@ -163,4 +163,48 @@ test('Bestand ohne Fach und unbekanntes Packungsgewicht bleiben null', async () 
   await importBackup(data, id(1), existing, async (table, row) => existing[table].push(row));
   assert.equal(existing.items[0].weight_grams, null);
   assert.equal(existing.stock_entries[0].compartment_id, null);
+});
+
+test('Preise und Bestellliste werden gesichert, inventarübergreifend zugeordnet und nicht addiert', async () => {
+  const data = fixture();
+  data.items[0].price = 4.99;
+  data.order_entries = [{ id: id(6), item_id: id(4), quantity: 3 }];
+  const backup = createBackup(data, id(1));
+  assert.equal(backup.items[0].price, 4.99);
+  assert.deepEqual(backup.order_entries, data.order_entries);
+  const existing = empty();
+  const insert = async (table, row) => existing[table].push(row);
+  assert.deepEqual(await importBackup(backup, id(10), existing, insert), { added: 5, skipped: 0 });
+  assert.equal(existing.items[0].price, 4.99);
+  assert.equal(existing.order_entries[0].item_id, existing.items[0].id);
+  assert.equal(existing.order_entries[0].inventory_id, id(10));
+  assert.notEqual(existing.order_entries[0].id, id(6));
+  // An existing order for this product wins even if its ID differs.
+  existing.order_entries[0].id = id(20);
+  existing.order_entries[0].quantity = 8;
+  assert.deepEqual(await importBackup(backup, id(10), existing, insert), { added: 0, skipped: 5 });
+  assert.equal(existing.order_entries.length, 1);
+  assert.equal(existing.order_entries[0].quantity, 8);
+  const old = validateBackup(fixture());
+  assert.equal(old.items[0].price, null);
+  assert.deepEqual(old.order_entries, []);
+});
+
+test('Ungültige Preise und Bestelleinträge scheitern vor dem ersten Import-Schreibzugriff', async () => {
+  for (const change of [
+    (data) => { data.items[0].price = -1; },
+    (data) => { data.items[0].price = '1.001'; },
+    (data) => { data.order_entries = null; },
+    (data) => { data.order_entries[0].quantity = 0; },
+    (data) => { data.order_entries[0].quantity = 2147483648; },
+    (data) => { data.order_entries[0].item_id = id(99); },
+    (data) => { data.order_entries.push({ ...data.order_entries[0], id: id(7) }); },
+  ]) {
+    const data = fixture();
+    data.order_entries = [{ id: id(6), item_id: id(4), quantity: 1 }];
+    change(data);
+    let writes = 0;
+    await assert.rejects(importBackup(data, id(10), empty(), async () => writes++));
+    assert.equal(writes, 0);
+  }
 });

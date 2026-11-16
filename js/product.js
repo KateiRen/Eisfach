@@ -70,3 +70,22 @@ export function optionalWeight(value) {
   }
   return weight;
 }
+
+export function optionalPrice(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    throw new Error('Bitte einen gültigen Preis in Euro mit höchstens zwei Nachkommastellen eingeben.');
+  }
+  const text = String(value).trim().replace(',', '.');
+  if (text === '' && typeof value === 'string') return null;
+  const price = Number(text);
+  if (!/^\d+(?:\.\d{1,2})?$/.test(text) || !Number.isFinite(price) || price < 0 || price > 99999999.99) {
+    throw new Error('Bitte einen gültigen Preis in Euro mit höchstens zwei Nachkommastellen eingeben.');
+  }
+  return price;
+}
+
+export function priceLabel(value) {
+  const price = optionalPrice(value);
+  return price === null ? '—' : price.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+}

@@ -4,7 +4,8 @@ import { uploadImage, imageURL, removeImage } from './storage.js';
 import { element, action, status } from './app.js';
 import { locationLabel, populateCompartments, locationSelection } from './locations.js';
 import { loadSorting, compareOrder, orderRecords, orderStockPositions } from './ordering.js';
-import { productDetails, productNumberSearch, thawingTimeLabel, optionalInteger, optionalWeight } from './product.js';
+import { productDetails, productNumberSearch, thawingTimeLabel, optionalInteger, optionalWeight, optionalPrice, priceLabel } from './product.js';
+import { reorderProduct } from './orders.js';
 
 export { optionalInteger, optionalWeight } from './product.js';
 
@@ -202,14 +203,16 @@ function render() {
       card.classList.add('catalog-card');
       if (compact) {
         const row = element('div', undefined, 'compact-row');
-        row.append(element('span', item.name, 'compact-name'));
+        row.append(element('span', item.name, 'compact-name'), element('span', priceLabel(item.price)));
         const links = element('div', undefined, 'compact-actions');
         const edit = action('Bearbeiten', () => editItem(item), 'text-link');
         const add = action('Einlagern', () => editStock(null, item.id), 'text-link');
-        edit.disabled = add.disabled = offline;
+        const reorder = action('Nachbestellen', () => reorderItem(item), 'text-link');
+        edit.disabled = add.disabled = reorder.disabled = offline;
         edit.setAttribute('aria-label', `Bearbeiten: ${item.name}`);
         add.setAttribute('aria-label', `Einlagern: ${item.name}`);
-        links.append(edit, add);
+        reorder.setAttribute('aria-label', `Nachbestellen: ${item.name}`);
+        links.append(edit, add, reorder);
         row.append(links);
         card.append(row);
         return card;
@@ -221,13 +224,15 @@ function render() {
       info.append(element('h3', item.name),
         element('p', `Produktnummer: ${item.product_number || '—'}`, 'muted'),
         element('p', `Teile: ${pack.parts} · Gewicht: ${pack.weight}`, 'muted'),
+        element('p', `Preis pro Packung: ${priceLabel(item.price)}`),
         element('p', productStockLabel(item.id, stockEntries)));
       appendProductDetails(info, item);
       const buttons = element('div', undefined, 'actions compact-actions');
       const edit = action('Bearbeiten', () => editItem(item));
       const add = action('Einlagern', () => editStock(null, item.id));
-      edit.disabled = add.disabled = offline;
-      buttons.append(edit, add);
+      const reorder = action('Nachbestellen', () => reorderItem(item));
+      edit.disabled = add.disabled = reorder.disabled = offline;
+      buttons.append(edit, add, reorder);
       info.append(buttons);
       card.append(preview, info);
       previews.push({ item, preview });
@@ -279,6 +284,7 @@ function appendProductDetails(container, item, stock = false) {
     container.append(element('p', `Favorit: ${favorite} · Rating: ${details.rating === null ? '—' : `${details.rating}/5`}`, 'muted'),
       element('p', `Nutzungscounter: ${details.usage_count}`, 'muted'));
   }
+
   if (details.product_url) {
     const link = element('a', 'Produktseite');
     link.href = details.product_url;
@@ -286,6 +292,12 @@ function appendProductDetails(container, item, stock = false) {
     link.rel = 'noopener noreferrer';
     container.append(link);
   }
+}
+
+async function reorderItem(item) {
+  if (offline || !navigator.onLine) throw new Error('Nachbestellen benötigt eine Internetverbindung.');
+  const entry = await reorderProduct(item.id);
+  status(`„${item.name}“ steht mit ${entry.quantity} Stück auf der Bestellliste.`);
 }
 
 export function scheduleStockPreviews(previews, isCurrent) {
@@ -402,7 +414,7 @@ async function editItem(item) {
   editingItem = item || null;
   editingVersion = item?.updated_at || null;
   form().reset();
-  for (const key of ['id', 'name', 'product_number', 'weight_grams', 'description', 'category', 'notes', 'preparation_minutes', 'thawing_minutes']) {
+  for (const key of ['id', 'name', 'product_number', 'price', 'weight_grams', 'description', 'category', 'notes', 'preparation_minutes', 'thawing_minutes']) {
     form().elements[key].value = item?.[key] ?? '';
   }
   updateProductNumberSearch();
@@ -469,6 +481,7 @@ async function saveItem(event) {
     body.preparation_minutes = optionalInteger(fields.preparation_minutes);
     body.thawing_minutes = optionalInteger(fields.thawing_minutes);
     body.weight_grams = optionalWeight(fields.weight_grams);
+    body.price = optionalPrice(fields.price);
     const details = productDetails({
       product_url: fields.product_url.trim(), parts: fields.parts.trim() || null,
       favorite: form().elements.favorite.checked,
@@ -517,7 +530,7 @@ async function saveItem(event) {
 
 async function deleteItem(item) {
   if (offline) throw new Error('Offline sind keine Änderungen möglich.');
-  if (!confirm(`Produkt „${item.name}“ unwiderruflich löschen? Alle zugehörigen Bestandspositionen und Bilder werden ebenfalls gelöscht.`)) return;
+  if (!confirm(`Produkt „${item.name}“ unwiderruflich löschen? Alle zugehörigen Bestandspositionen, Bestelllisteneinträge und Bilder werden ebenfalls gelöscht.`)) return;
   const images = await list('item_images', `?item_id=eq.${item.id}&select=*&order=id.asc`);
   // Objekte vor dem Artikel löschen, solange die Storage-Policy dessen Existenz prüfen kann.
   for (const image of images) await removeImage(image);

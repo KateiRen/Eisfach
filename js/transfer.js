@@ -3,16 +3,17 @@ import { loadConnection } from './auth.js';
 import { status } from './app.js';
 import { createZip, readZip, MAX_ZIP_SIZE } from './zip.js';
 import { downloadImage, restoreImage, validateWebP } from './storage.js';
-import { productDetails } from './product.js';
+import { productDetails, optionalPrice } from './product.js';
 
-const TABLES = ['storage_locations', 'storage_compartments', 'items', 'stock_entries'];
+const TABLES = ['storage_locations', 'storage_compartments', 'items', 'stock_entries', 'order_entries'];
 const FIELDS = {
   storage_locations: ['id', 'name'],
   storage_compartments: ['id', 'location_id', 'name'],
-  items: ['id', 'name', 'product_number', 'weight_grams', 'description', 'category',
+  items: ['id', 'name', 'product_number', 'weight_grams', 'price', 'description', 'category',
     'preparation_minutes', 'thawing_minutes', 'qr_code', 'notes',
     'product_url', 'parts', 'favorite', 'usage_count', 'rating'],
   stock_entries: ['id', 'item_id', 'location_id', 'compartment_id', 'quantity'],
+  order_entries: ['id', 'item_id', 'quantity'],
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -28,9 +29,10 @@ export function validateBackup(data) {
   const result = { format: 'eisfach', version: 1, inventory_id: data.inventory_id.toLowerCase() };
   const ids = {};
   for (const table of TABLES) {
-    requireValue(Array.isArray(data[table]), `${table} fehlt.`);
+    const records = table === 'order_entries' && data[table] === undefined ? [] : data[table];
+    requireValue(Array.isArray(records), `${table} fehlt.`);
     ids[table] = new Set();
-    result[table] = data[table].map((row) => {
+    result[table] = records.map((row) => {
       requireValue(row && typeof row === 'object' && !Array.isArray(row), `${table}: Datensatz erwartet.`);
       const clean = pick(row, FIELDS[table]);
       for (const field of FIELDS[table].filter((key) => key === 'id' || key.endsWith('_id'))) {
@@ -40,12 +42,13 @@ export function validateBackup(data) {
       }
       requireValue(!ids[table].has(clean.id), `${table}: doppelte ID.`);
       ids[table].add(clean.id);
-      if (table !== 'stock_entries') {
+      if (table !== 'stock_entries' && table !== 'order_entries') {
         requireValue(typeof clean.name === 'string' && clean.name.trim().length > 0 &&
           [...clean.name].length <= 200, `${table}: Name muss 1–200 Zeichen enthalten.`);
       }
       if (table === 'items') {
         Object.assign(clean, productDetails(clean));
+        clean.price = optionalPrice(clean.price);
         for (const field of ['product_number', 'description', 'category', 'notes']) {
           requireValue(typeof clean[field] === 'string', `items: ${field} muss Text sein.`);
         }
@@ -63,6 +66,10 @@ export function validateBackup(data) {
       if (table === 'stock_entries') {
         requireValue(Number.isInteger(clean.quantity) && clean.quantity >= 0 &&
           clean.quantity <= 2147483647, 'Stückzahl ist ungültig.');
+      }
+      if (table === 'order_entries') {
+        requireValue(Number.isInteger(clean.quantity) && clean.quantity > 0 &&
+          clean.quantity <= 2147483647, 'Bestellmenge ist ungültig.');
       }
       return clean;
     });
@@ -86,6 +93,12 @@ export function validateBackup(data) {
     requireValue(row.compartment_id === null ||
       compartments.get(row.compartment_id)?.location_id === row.location_id,
     'Bestandsposition verweist auf ein fehlendes oder unpassendes Fach.');
+  }
+  const orderedProducts = new Set();
+  for (const row of result.order_entries) {
+    requireValue(ids.items.has(row.item_id), 'Bestelleintrag verweist auf fehlendes Produkt.');
+    requireValue(!orderedProducts.has(row.item_id), 'Doppeltes Produkt auf der Bestellliste.');
+    orderedProducts.add(row.item_id);
   }
   return result;
 }
@@ -130,6 +143,9 @@ export async function importBackup(input, targetInventory, existing, insert, onP
           }
           match ??= [...known.values()].find((candidate) => candidate.name === row.name &&
             (table === 'storage_locations' || candidate.location_id === row.location_id));
+        }
+        if (table === 'order_entries') {
+          match ??= [...known.values()].find((candidate) => candidate.item_id === row.item_id);
         }
         if (match) {
           maps[table].set(source.id, match.id);
@@ -293,7 +309,8 @@ export function initTransfer() {
       backup = parsed;
       archive = parsedArchive;
       preview.textContent = `${backup.items.length} Produkte, ${backup.stock_entries.length} Bestandspositionen, ` +
-        `${backup.storage_locations.length} Lagerorte, ${backup.storage_compartments.length} Fächer` +
+        `${backup.storage_locations.length} Lagerorte, ${backup.storage_compartments.length} Fächer, ` +
+        `${backup.order_entries.length} Bestelleinträge` +
         (archive ? `, ${archive.images.length} Bilder.` : '.');
     } catch (error) {
       if (revision === fileRevision) preview.textContent = `Datei konnte nicht geladen werden: ${error.message}`;

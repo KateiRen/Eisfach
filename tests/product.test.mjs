@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { productDetails, productNumberSearch, productURL, thawingTimeLabel } from '../js/product.js';
+import { productDetails, productNumberSearch, productURL, thawingTimeLabel, optionalPrice, priceLabel } from '../js/product.js';
 
 test('Produktnummernsuche verlinkt 3 bis 6 Ziffern bei bofrost und erhält führende Nullen', () => {
   for (const number of ['001', '1234', '11620', '012345']) {
@@ -60,4 +60,17 @@ test('Auftauzeit rechnet nur Werte über 60 in Stunden und Restminuten um', () =
     [61, '1 Std. 1 Min.'], [90, '1 Std. 30 Min.'], [120, '2 Std.'],
     [1441, '24 Std. 1 Min.'], [2147483647, '35791394 Std. 7 Min.'],
   ]) assert.equal(thawingTimeLabel(value), expected);
+});
+
+test('Packungspreise sind optional, akzeptieren Dezimalkomma und erhalten kostenlose Produkte', () => {
+  for (const empty of ['', ' ', null, undefined]) assert.equal(optionalPrice(empty), null);
+  for (const [value, expected] of [[' 4,99 ', 4.99], ['4.90', 4.9], [0, 0],
+    ['0,00', 0], ['99999999.99', 99999999.99]]) {
+    assert.equal(optionalPrice(value), expected);
+  }
+  assert.equal(priceLabel(null), '—');
+  assert.equal(priceLabel('4.90'), '4,90\u00a0€');
+  assert.equal(priceLabel(0), '0,00\u00a0€');
+  for (const invalid of [-1, '1.999', '1,999', 100000000, Infinity, NaN, true, [], {},
+    '1e2', '1.000,00', '4 Euro', '1,2.3']) assert.throws(() => optionalPrice(invalid), /Preis/);
 });

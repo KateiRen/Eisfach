@@ -19,7 +19,7 @@
     <p>Export und Import benötigen eine Internetverbindung.</p>
     <section class="card">
       <h2>JSON exportieren</h2>
-      <p>Produkte, Bestandspositionen, Lagerorte und Fächer sichern. Bilder, Bildverweise und Gerätezugänge werden nicht exportiert. Während des Exports bitte keine Daten ändern.</p>
+      <p>Produkte einschließlich Packungspreisen, Bestandspositionen, Bestellliste, Lagerorte und Fächer sichern. Bilder, Bildverweise und Gerätezugänge werden nicht exportiert. Während des Exports bitte keine Daten ändern.</p>
       <button id="export-json" type="button">JSON herunterladen</button>
       <p>Alternativ eine ZIP-Sicherung mit allen Produktbildern, Beschriftungen und ihrer Reihenfolge erstellen (maximal 100 MB und 1999 Bilder). Bilder werden unverändert als WebP übernommen. Gerätezugänge bleiben ausgeschlossen.</p>
       <button id="export-zip" type="button">Export inklusive Bilder</button>
@@ -31,7 +31,7 @@
       <input id="import-file" type="file" accept=".json,.zip,application/json,application/zip" required>
       <p id="import-preview" role="status">Bitte eine Exportdatei auswählen.</p>
       <label class="checkbox-label"><input id="import-confirm" type="checkbox" required> Daten in dieses Inventar übernehmen</label>
-      <p>Ein Import läuft schrittweise. Bei einem Fehler bleiben bereits ergänzte Daten erhalten. Dieselbe Datei kann erneut importiert werden, ohne diese Daten zu duplizieren. Bestandsmengen werden weder addiert noch abgeglichen. Bitte währenddessen keine Daten auf anderen Geräten ändern.</p>
+      <p>Ein Import läuft schrittweise. Bei einem Fehler bleiben bereits ergänzte Daten erhalten. Dieselbe Datei kann erneut importiert werden, ohne diese Daten zu duplizieren. Bestands- und Bestellmengen werden weder addiert noch abgeglichen; bereits auf der Bestellliste vorhandene Produkte werden übersprungen. Bitte währenddessen keine Daten auf anderen Geräten ändern.</p>
       <p>ZIP-Dateien werden vollständig geprüft, bevor Daten geschrieben werden. Anschließend werden Produkte und Bestand ergänzt, danach die Bilder. Bestehende Bilder bleiben unverändert. Nur unveränderte Eisfach-ZIP-Sicherungen werden unterstützt; bitte nicht neu komprimieren.</p>
       <button id="import-json" type="submit" disabled>Importieren</button>
     </form>

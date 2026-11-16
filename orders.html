@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#126b73">
+  <title>Bestellliste · Eisfach</title>
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="./css/app.css">
+  <script type="module" src="./js/app.js"></script>
+</head>
+<body data-page="orders">
+  <header><div class="brand"><a href="./app.html">❄ Eisfach</a><span id="inventory-name" class="inventory-name">Dein Inventar</span></div><nav aria-label="Hauptnavigation"></nav></header>
+  <main>
+    <h1>Bestellliste</h1>
+    <p id="status" role="status"></p>
+    <p>Produkte über „Nachbestellen“ in der <a href="./app.html#catalog">Produktliste</a> hinzufügen. Änderungen hier verändern nicht den Bestand.</p>
+    <button id="reload-orders" type="button" class="secondary">Aktualisieren</button>
+    <div id="orders" class="grid"></div>
+  </main>
+</body>
+</html>

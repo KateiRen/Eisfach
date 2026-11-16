@@ -5,7 +5,7 @@
 Verbindliche Definition ist [supabase/schema.sql](../supabase/schema.sql).
 Sie initialisiert eine frische Supabase-Datenbank in einer Transaktion und ist
 nicht zum erneuten Ausführen auf bestehenden Tabellen vorgesehen.
-Die folgenden elf Tabellen liegen im Schema `public`; zusätzlich wird ein
+Die folgenden zwölf Tabellen liegen im Schema `public`; zusätzlich wird ein
 privater Supabase-Storage-Bucket verwendet.
 
 ## Konventionen
@@ -34,6 +34,7 @@ inventories
   ├── inventory_sorting             0..1 Konfiguration je Inventar
   ├── audit_log
   ├── items
+  │     ├── order_entries          Bestellliste, ein Eintrag pro Produkt
   │     ├── item_images            Metadaten → private Storage-Datei
   │     └── stock_entries ─────┐
   └── storage_locations      │
@@ -119,6 +120,7 @@ verbraucht den Code atomar unter Zeilensperre; beim letzten Verbrauch wird
 | `usage_count` | integer | nein | `0` | Nutzungscounter, nichtnegativ; darf durch Updates nicht kleiner werden |
 | `rating` | integer | ja | keiner | Optionale Bewertung, einschließlich 0 und 5 |
 | `weight_grams` | numeric(12,3) | ja | keiner | Gewicht einer Packung in Gramm, 0 ≤ Wert < 1000000000 |
+| `price` | numeric(10,2) | ja | keiner | Euro pro Packung, 0 ≤ Wert < 100000000; NULL unbekannt, 0 kostenlos |
 | `description` | text | nein | `''` | Produktbeschreibung |
 | `category` | text | nein | `''` | Freie Kategorie; leer entspricht „Ohne Kategorie“ |
 | `preparation_minutes` | integer | ja | keiner | Zubereitungszeit, nichtnegativ; `NULL` unbekannt, 0 zulässig |
@@ -151,6 +153,31 @@ Für eine bestehende Datenbank auf dem vorherigen Stand ergänzt
 und Funktionen. `parts` wird aus passenden `Teile:`-Notizzeilen übernommen,
 Notizen bleiben erhalten; Zähler beginnen bei 0. Das Update gehört nicht zur
 Initialisierung einer neuen Datenbank.
+
+Der Packungspreis wird unabhängig von Bestand und Bestellmenge gepflegt.
+Die App akzeptiert höchstens zwei Nachkommastellen (Punkt oder Komma);
+PostgreSQL kann direkte numerische Eingaben auf zwei Stellen runden.
+Bestehende Installationen auf dem Stand des Metadaten-Updates ergänzen Preis
+und Bestellliste einmalig mit
+[update_product_orders.sql](../supabase/update_product_orders.sql).
+
+### `order_entries` – gemeinsame Bestellliste
+
+| Feld | Typ | NULL | Default | Bedeutung / Prüfung |
+| --- | --- | --- | --- | --- |
+| `id` | uuid | nein | `gen_random_uuid()` | PK; stabile ID für Export/Import |
+| `inventory_id` | uuid | nein | keiner | FK auf `inventories.id`, `ON DELETE CASCADE` |
+| `item_id` | uuid | nein | keiner | Zusammengesetzter FK mit `inventory_id` auf `items`, `ON DELETE CASCADE` |
+| `quantity` | integer | nein | `1` | Positive ganze Bestellmenge, maximal 2147483647 |
+| `created_at` | timestamptz | nein | `now()` | Anlagezeitpunkt |
+| `updated_at` | timestamptz | nein | `now()` | Änderungsstand für optimistische Konfliktprüfung |
+
+`(inventory_id, item_id)` ist eindeutig. `reorder_product()` legt den Eintrag
+an oder erhöht atomar um 1, ohne Bestand oder Nutzungscounter zu verändern.
+Ein Überlauf bricht die Änderung ab. Jeder Aufruf ist ein zusätzlicher
+Bestellwunsch, kein idempotenter Retry. Die App wiederholt ihn nicht automatisch.
+Die Bestellliste speichert keine historischen Preise, sondern zeigt den
+aktuellen Produktpreis. Eintragslöschung verändert weder Produkt noch Bestand.
 
 ## 5. `storage_locations` – definierte Lagerorte
 
@@ -279,7 +306,7 @@ Die konkreten Begrenzungen sind Funktionslogik, keine Feld-Constraints.
 
 ## Zugriffsrechte und RLS
 
-RLS ist auf allen elf Tabellen aktiviert.
+RLS ist auf allen zwölf Tabellen aktiviert.
 Die Browserrollen `anon` und `authenticated` haben dieselben hier beschriebenen
 Geräterechte. Es werden keine Supabase-Auth-Benutzer benötigt.
 
@@ -287,7 +314,7 @@ Geräterechte. Es werden keine Supabase-Auth-Benutzer benötigt.
 | --- | --- |
 | `inventories` | SELECT |
 | `device_registrations` | SELECT nur `id`, `inventory_id`, `device_id`, `device_name`, `revoked`, `created_at`, `last_seen_at`; UPDATE nur `device_name`; DELETE |
-| `items`, `stock_entries`, `storage_locations`, `storage_compartments`, `item_images` | SELECT, INSERT, UPDATE, DELETE |
+| `items`, `stock_entries`, `order_entries`, `storage_locations`, `storage_compartments`, `item_images` | SELECT, INSERT, UPDATE, DELETE |
 | `inventory_sorting` | SELECT, INSERT, UPDATE; kein DELETE |
 | `audit_log` | SELECT |
 | `join_tokens`, `registration_rate_limits` | Keine direkten Rechte |
@@ -309,6 +336,7 @@ Registrierung und den SHA-256-Hash. Fehlerhafte/fehlende Zugangsdaten ergeben
 | `touch_device()` | Browserrollen; void | Berechtigtes Gerät prüfen und `last_seen_at` aktualisieren |
 | `create_stock_position(p_id uuid, p_item_id uuid, p_location_id uuid, p_compartment_id uuid, p_quantity integer)` | Browserrollen; Bestandsposition als SETOF | Idempotente Positionserfassung und atomare Erhöhung von `usage_count`; arbeitet mit den bestehenden RLS-Rechten, nicht als SECURITY DEFINER |
 | `preserve_item_usage_count()` | Nur Trigger | Verhindert eine Reduktion von `items.usage_count` |
+| `reorder_product(p_item_id uuid)` | Browserrollen; Bestelleintrag als SETOF | Inventargebundenes atomares Anlegen/Erhöhen der Bestellmenge; Invoker-Rechte und RLS |
 | `can_access_inventory_image(p_path text)` | Browserrollen/Policies; boolean | Inventar und Produktzuordnung eines Bildpfads prüfen |
 | `delete_storage_location(p_location_id uuid, p_compartment_id uuid, p_updated_at timestamptz, p_target_location_id uuid, p_target_compartment_id uuid)` | Browserrollen; integer | Ort oder Fach versionsgeprüft löschen; betroffene Positionen atomar verschieben, Anzahl zurückgeben |
 | `setup_inventory(p_name text, p_description text, p_device_name text)` | Nur service_role; Inventar-ID, Geräte-ID, Gerätegeheimnis | Inventar und erstes Gerät atomar anlegen |
@@ -317,7 +345,7 @@ Registrierung und den SHA-256-Hash. Fehlerhafte/fehlende Zugangsdaten ergeben
 | `issue_join_token(p_inventory_id uuid, p_caller_device_id text, p_caller_device_token text)` | Nur service_role; Join-Code und Ablaufzeit | Code ausstellen |
 | `revoke_device(p_inventory_id uuid, p_device_id text, p_caller_device_id text, p_caller_device_token text)` | Nur service_role; void | Gerätezugriff nach erneuter Aufruferprüfung widerrufen |
 | `consume_registration_attempt(p_inventory_id uuid, p_client_key text)` | Nur service_role; boolean | Rate-Limit-Verbrauch buchen und Freigabe zurückgeben |
-| `set_item_updated_at()` | Nur Trigger | `updated_at` für Produkte, Positionen, Orte, Fächer und Sortierung setzen |
+| `set_item_updated_at()` | Nur Trigger | `updated_at` für Produkte, Positionen, Bestelleinträge, Orte, Fächer und Sortierung setzen |
 | `audit_change()` | Nur Trigger | Inventar-, Produkt-, Bild- und Geräteereignisse schreiben |
 | `audit_stock_change()` | Nur Trigger | Bestandsereignisse schreiben |
 

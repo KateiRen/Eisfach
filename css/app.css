@@ -55,7 +55,7 @@ input[type="color"] { width: 100%; max-width: 12rem; height: 3rem; padding: .25r
 .compact-actions button { padding: .4rem .65rem; font-size: .875rem; }
 #items.compact-list .category-group > .grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
 .compact-list .catalog-card { padding: .35rem 0; border: 0; border-bottom: 1px solid #cfe0e1; border-radius: 0; box-shadow: none; }
-.compact-row { display: flex; align-items: center; gap: .75rem; min-width: 0; }
+.compact-row { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; min-width: 0; }
 .compact-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .compact-row .compact-actions { display: flex; flex: 0 0 auto; gap: .65rem; }
 .compact-actions .text-link { min-height: 0; padding: 0; background: none; color: var(--accent-link); font-weight: 400; text-decoration: underline; }
