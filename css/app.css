@@ -90,6 +90,7 @@ input[type="color"] { width: 100%; max-width: 12rem; height: 3rem; padding: .25r
 .rating-options { display: flex; flex-wrap: wrap; gap: 1rem; }
 .rating-options label { margin: 0; }
 .muted { color: #49666c; }
+body[data-page="bulk-edit"] main { max-width: none; }
 .bulk-table-scroll { overflow-x: auto; margin-bottom: 1rem; }
 .bulk-table { width: 100%; border-collapse: collapse; }
 .bulk-table caption { text-align: left; margin-bottom: .75rem; }
@@ -98,7 +99,7 @@ input[type="color"] { width: 100%; max-width: 12rem; height: 3rem; padding: .25r
 .bulk-table tbody th { min-width: 13rem; }
 .bulk-table tbody th span { display: block; margin-top: .35rem; font-size: .875rem; font-weight: 400; }
 .bulk-table input, .bulk-table textarea { margin: 0; min-width: 10rem; }
-.bulk-table textarea { min-width: 16rem; }
+.bulk-table textarea { min-width: 24rem; min-height: 10rem; }
 .bulk-row-status { min-width: 14rem; }
 .bulk-row-error { background: #fff1d2; }
 #bulk-fields { border: 0; padding: 0; margin: 0; min-width: 0; }

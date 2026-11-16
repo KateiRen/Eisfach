@@ -100,7 +100,7 @@ Unter **Menü → Einstellungen** stehen:
 | Geräte | Geräte auflisten, umbenennen, deaktivieren, löschen, verbinden oder lokal trennen |
 | Orte und Fächer | Lagerorte und zugehörige optionale Fächer verwalten |
 | Sortierung | Reihenfolge von Kategorien, Orten und Fächern inventarweit festlegen |
-| Bulk-Edit | Gewicht, Teile, Beschreibung, Zubereitungszeit, Auftauzeit und Notizen tabellarisch bearbeiten, je 20 Artikel pro Seite |
+| Bulk-Edit | Gewicht, Teile, Beschreibung, Zubereitungszeit, Auftauzeit, Notizen und Produktseite (URL) tabellarisch bearbeiten, je 10 Artikel pro Seite |
 | Aussehen | Hauptakzentfarbe und optionale zweite Farbe für Links/Hervorhebungen |
 | Export/Import | JSON-Sicherung ohne Bilder oder ZIP-Sicherung inklusive Bilder |
 
@@ -110,7 +110,10 @@ Umbenennen ändert keine Zuordnungen.
 
 **Bulk-Edit** lädt die Artikel seitenweise in alphabetischer Reihenfolge.
 Name, Produktnummer und Nutzungscounter werden nur angezeigt.
-Die Tabelle ist bei Bedarf seitlich scrollbar. **Änderungen dieser Seite speichern**
+Die Produktseite akzeptiert HTTP-/HTTPS-URLs ohne Zugangsdaten; ein leeres Feld entfernt die URL.
+Die Ansicht nutzt die gesamte Bildschirmbreite mit größeren Eingabefeldern für
+Beschreibung und Notizen. Die Tabelle ist bei Bedarf seitlich scrollbar.
+**Änderungen dieser Seite speichern**
 sendet nur die geänderten Felder der bearbeiteten Artikel; unveränderte Artikel
 werden nicht geschrieben. Erfolgreiche Änderungen bleiben gespeichert, während
 Fehler je Zeile erscheinen und die betroffenen Eingaben zur Korrektur oder

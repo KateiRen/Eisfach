@@ -1,8 +1,8 @@
 import { rest } from './supabase.js';
 import { element, status } from './app.js';
-import { optionalInteger, optionalWeight } from './product.js';
+import { optionalInteger, optionalWeight, productURL } from './product.js';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 const FIELDS = [
   { name: 'weight_grams', label: 'Gewicht pro Packung', type: 'number', max: '999999999.999', step: '0.001' },
   { name: 'parts', label: 'Teile', type: 'text' },
@@ -10,6 +10,7 @@ const FIELDS = [
   { name: 'preparation_minutes', label: 'Zubereitungszeit', type: 'number', max: '2147483647', step: '1' },
   { name: 'thawing_minutes', label: 'Auftauzeit', type: 'number', max: '2147483647', step: '1' },
   { name: 'notes', label: 'Notizen', type: 'textarea', maxLength: 4000 },
+  { name: 'product_url', label: 'Produktseite (URL)', type: 'url' },
 ];
 let rows = [];
 let page = 0;
@@ -34,9 +35,10 @@ export function bulkChanges(item, draft) {
     }
     const value = field.name === 'weight_grams' ? optionalWeight(text)
       : field.type === 'number' ? optionalInteger(text)
+      : field.type === 'url' ? productURL(text)
       : field.name === 'parts' ? text || null : text;
     const previous = field.type === 'number' && item[field.name] != null
-      ? Number(item[field.name]) : item[field.name] ?? (field.name === 'parts' ? null : '');
+      ? Number(item[field.name]) : item[field.name] ?? (field.name === 'parts' || field.type === 'url' ? null : '');
     if (value !== previous) changes[field.name] = value;
   }
   return changes;

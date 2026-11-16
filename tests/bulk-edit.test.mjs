@@ -13,7 +13,7 @@ globalThis.localStorage = {
 const item = (id = 'product') => ({
   id, name: 'Erbsen', product_number: '00123', weight_grams: '500.125', parts: '2 Beutel',
   description: 'Fein', preparation_minutes: 0, thawing_minutes: null, notes: 'Dünsten',
-  usage_count: 7, rating: 5, updated_at: '2026-01-01T10:00:00Z',
+  product_url: 'https://example.com/erbsen', usage_count: 7, rating: 5, updated_at: '2026-01-01T10:00:00Z',
 });
 const row = (id) => {
   const source = item(id);
@@ -46,30 +46,59 @@ test('Bulk-Änderungen enthalten nur bearbeitete erlaubte Felder und unterscheid
   ]) assert.throws(() => bulkChanges(source, { ...draft, ...fields }));
 });
 
-test('Bulk-Seiten laden höchstens 20 sichtbare Artikel mit stabiler Sortierung und erkennen die letzte Seite', async (t) => {
+test('Bulk-Produktseiten validieren HTTP/HTTPS, erhalten fehlerhafte Eingaben und lassen sich ändern oder leeren', async () => {
+  const record = row('product');
+  for (const product_url of ['keine URL', 'javascript:alert(1)', 'ftp://example.com', 'https://user:pass@example.com']) {
+    assert.throws(() => bulkChanges(record.item, { ...record.draft, product_url }), /HTTP-/);
+  }
+  record.draft.product_url = 'keine URL';
+  let writes = 0;
+  const save = async (source, changes) => {
+    writes++;
+    assert.deepEqual(changes, { product_url: writes === 1 ? 'http://example.org/' : null });
+    return { ...source, ...changes };
+  };
+  assert.deepEqual(await saveBulkRows([record], save), { saved: 0, failed: 1 });
+  assert.equal(writes, 0);
+  assert.equal(record.draft.product_url, 'keine URL');
+  assert.match(record.feedback, /HTTP-/);
+  record.draft.product_url = ' http://example.org ';
+  assert.deepEqual(await saveBulkRows([record], save), { saved: 1, failed: 0 });
+  assert.equal(record.draft.product_url, 'http://example.org/');
+  record.draft.product_url = ' ';
+  assert.deepEqual(await saveBulkRows([record], save), { saved: 1, failed: 0 });
+  assert.equal(record.item.product_url, null);
+  assert.equal(record.draft.product_url, '');
+  assert.equal(bulkRowChanged(record), false);
+  assert.deepEqual(bulkChanges(record.item, { ...record.draft, product_url: ' ' }), {});
+});
+
+test('Bulk-Seiten laden höchstens 10 sichtbare Artikel mit stabiler Sortierung und erkennen die letzte Seite', async (t) => {
   connect(t);
   const requests = [];
   t.mock.method(globalThis, 'fetch', async (url) => {
     const query = new URL(url).searchParams;
     requests.push(query);
-    const counts = { 0: 21, 20: 2, 40: 20, 60: 0 };
+    const counts = { 0: 11, 10: 2, 20: 10, 30: 0 };
     return Response.json(Array.from({ length: counts[query.get('offset')] }, (_, index) => item(String(index))));
   });
   const first = await loadBulkPage(0);
-  assert.equal(first.items.length, 20);
+  assert.equal(first.items.length, 10);
   assert.equal(first.hasNext, true);
-  assert.equal(first.items.at(-1).id, '19');
+  assert.equal(first.items.at(-1).id, '9');
+  assert.equal(first.items[0].product_url, 'https://example.com/erbsen');
   const last = await loadBulkPage(1);
   assert.equal(last.items.length, 2);
   assert.equal(last.hasNext, false);
   const exact = await loadBulkPage(2);
-  assert.equal(exact.items.length, 20);
+  assert.equal(exact.items.length, 10);
   assert.equal(exact.hasNext, false);
   assert.deepEqual(await loadBulkPage(3), { items: [], hasNext: false });
-  assert.equal(requests[0].get('limit'), '21');
-  assert.equal(requests[1].get('offset'), '20');
+  assert.equal(requests[0].get('limit'), '11');
+  assert.equal(requests[1].get('offset'), '10');
   assert.equal(requests[0].get('order'), 'name.asc,id.asc');
   assert.equal(requests[0].get('select').includes('item_images'), false);
+  assert.ok(requests[0].get('select').split(',').includes('product_url'));
 });
 
 test('Teilfehler erhalten Eingaben; erfolgreiche und unveränderte Artikel werden beim Retry nicht erneut geschrieben', async () => {
