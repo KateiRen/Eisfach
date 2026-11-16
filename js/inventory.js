@@ -4,7 +4,9 @@ import { uploadImage, imageURL, removeImage } from './storage.js';
 import { element, action, status } from './app.js';
 import { locationLabel, populateCompartments, locationSelection } from './locations.js';
 import { loadSorting, compareOrder, orderRecords, orderStockPositions } from './ordering.js';
-import { productDetails, thawingTimeLabel } from './product.js';
+import { productDetails, thawingTimeLabel, optionalInteger, optionalWeight } from './product.js';
+
+export { optionalInteger, optionalWeight } from './product.js';
 
 let items = [];
 let stockEntries = [];
@@ -84,31 +86,12 @@ export function productStockLabel(itemId, entries) {
   return `Bestand: ${quantity > 0 ? `${quantity} Stück · ` : ''}${positions}`;
 }
 
-export function optionalInteger(value) {
-  if (value === '') return null;
-  const number = Number(value);
-  if (!Number.isInteger(number) || number < 0 || number > 2147483647) {
-    throw new Error('Zeiten müssen nichtnegative ganze Minuten sein.');
-  }
-  return number;
-}
-
 export function stockValues(fields) {
   const quantity = Number(fields.quantity);
   if (fields.quantity === '' || !Number.isInteger(quantity) || quantity < 0 || quantity > 2147483647) {
     throw new Error('Bitte eine gültige nichtnegative ganze Stückzahl eingeben.');
   }
   return { quantity };
-}
-
-export function optionalWeight(value) {
-  if (value === '') return null;
-  const weight = Number(value);
-  if (!/^\d+(?:\.\d{1,3})?$/.test(value) ||
-      !Number.isFinite(weight) || weight < 0 || weight > 999999999.999) {
-    throw new Error('Bitte ein gültiges Packungsgewicht mit höchstens drei Nachkommastellen eingeben.');
-  }
-  return weight;
 }
 
 async function refresh() {

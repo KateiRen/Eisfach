@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#126b73">
+  <title>Einstellungen · Bulk-Edit · Eisfach</title>
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="stylesheet" href="./css/app.css">
+  <script type="module" src="./js/app.js"></script>
+</head>
+<body data-page="bulk-edit">
+  <header><div class="brand"><a href="./app.html">❄ Eisfach</a><span id="inventory-name" class="inventory-name">Dein Inventar</span></div><nav aria-label="Hauptnavigation"></nav></header>
+  <main>
+    <h1>Einstellungen</h1>
+    <h2>Bulk-Edit</h2>
+    <p>Bearbeite bis zu 20 Artikel pro Seite und speichere alle Änderungen mit einem Klick.
+      Name, Produktnummer und Nutzungscounter dienen nur zur Orientierung.
+      Leere Gewichts- und Zeitfelder bedeuten „nicht angegeben“; Zeiten werden in Minuten eingegeben.</p>
+    <p id="status" role="status"></p>
+    <div class="toolbar" aria-label="Seitenauswahl">
+      <button id="bulk-previous" type="button" class="secondary" disabled>Zurück</button>
+      <span id="bulk-page" aria-live="polite">Noch keine Artikel geladen.</span>
+      <button id="bulk-next" type="button" class="secondary" disabled>Weiter</button>
+      <button id="bulk-reload" type="button" class="secondary" disabled>Seite neu laden</button>
+    </div>
+    <form id="bulk-form" novalidate>
+      <fieldset id="bulk-fields" disabled>
+        <legend class="bulk-legend">Produktdaten</legend>
+        <div class="bulk-table-scroll" role="region" aria-label="Artikeltabelle, seitlich scrollbar" tabindex="0">
+          <table class="bulk-table">
+            <caption>Artikel alphabetisch nach Name, je 20 pro Seite</caption>
+            <thead>
+              <tr>
+                <th scope="col">Artikel</th>
+                <th scope="col">Gewicht pro Packung (g)</th>
+                <th scope="col">Teile</th>
+                <th scope="col">Beschreibung</th>
+                <th scope="col">Zubereitungszeit (Min.)</th>
+                <th scope="col">Auftauzeit (Min.)</th>
+                <th scope="col">Notizen</th>
+                <th scope="col">Nutzungscounter</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody id="bulk-rows"></tbody>
+          </table>
+        </div>
+        <p id="bulk-empty" hidden>Keine Artikel auf dieser Seite vorhanden.</p>
+        <div class="actions">
+          <button id="bulk-save" type="submit" disabled>Änderungen dieser Seite speichern</button>
+          <span id="bulk-dirty" role="status"></span>
+        </div>
+      </fieldset>
+    </form>
+  </main>
+</body>
+</html>

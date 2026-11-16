@@ -34,3 +34,22 @@ export function thawingTimeLabel(minutes) {
   const remainder = minutes % 60;
   return `${hours} Std.${remainder ? ` ${remainder} Min.` : ''}`;
 }
+
+export function optionalInteger(value) {
+  if (value === '') return null;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 0 || number > 2147483647) {
+    throw new Error('Zeiten müssen nichtnegative ganze Minuten sein.');
+  }
+  return number;
+}
+
+export function optionalWeight(value) {
+  if (value === '') return null;
+  const weight = Number(value);
+  if (!/^\d+(?:\.\d{1,3})?$/.test(value) ||
+      !Number.isFinite(weight) || weight < 0 || weight > 999999999.999) {
+    throw new Error('Bitte ein gültiges Packungsgewicht mit höchstens drei Nachkommastellen eingeben.');
+  }
+  return weight;
+}

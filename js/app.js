@@ -39,6 +39,7 @@ function initNavigation(page) {
     ['Geräte', './devices.html', 'devices'],
     ['Orte und Fächer', './freezer.html', 'freezer'],
     ['Sortierung', './sorting.html', 'sorting'],
+    ['Bulk-Edit', './bulk-edit.html', 'bulk-edit'],
     ['Aussehen', './appearance.html', 'appearance'],
     ['Export/Import', './transfer.html', 'transfer'],
   ]) {
@@ -122,6 +123,7 @@ async function init() {
   if (page === 'devices') await (await import('./devices.js')).initDevices();
   if (page === 'freezer') await (await import('./freezer.js')).initFreezer();
   if (page === 'sorting') await (await import('./sorting.js')).initSorting();
+  if (page === 'bulk-edit') await (await import('./bulk-edit.js')).initBulkEdit();
   if (page === 'transfer') (await import('./transfer.js')).initTransfer();
 }
 
