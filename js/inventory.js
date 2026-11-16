@@ -1,6 +1,6 @@
 import { rest, list } from './supabase.js';
 import { loadConnection, saveSnapshot, loadSnapshot } from './auth.js';
-import { uploadImage, imageURL, removeImage, loadImageURL } from './storage.js';
+import { uploadImage, imageURL, removeImage } from './storage.js';
 import { element, action, status } from './app.js';
 import { locationLabel, populateCompartments, locationSelection } from './locations.js';
 import { loadSorting, compareOrder, orderRecords, orderStockPositions } from './ordering.js';
@@ -409,7 +409,6 @@ async function editItem(item) {
 
 function updateEditorActions() {
   form().querySelector('[type=submit]').disabled = editorBusy || offline;
-  form().elements.image_url.readOnly = editorBusy || offline;
   document.querySelector('#cancel-item').disabled = editorBusy;
   const remove = document.querySelector('#delete-item');
   remove.hidden = !editingItem;
@@ -458,7 +457,6 @@ async function saveItem(event) {
     const { usage_count, ...editableDetails } = details;
     Object.assign(body, editableDetails);
     if (!body.name) throw new Error('Ein Name ist erforderlich.');
-    const urlImage = fields.image_url.trim() ? await loadImageURL(fields.image_url) : null;
     if (creating) {
       body.id = id;
       body.inventory_id = loadConnection().inventoryId;
@@ -481,10 +479,6 @@ async function saveItem(event) {
       await uploadImage(id, files[index], index);
     }
     form().elements.images.value = '';
-    if (urlImage) {
-      await uploadImage(id, urlImage, files.length);
-      form().elements.image_url.value = '';
-    }
     await refresh();
     if (stockDialog().open) {
       const product = items.find((item) => item.id === id);
@@ -757,7 +751,7 @@ export async function loadProductImages(item, gallery, isCurrent, runAction = (h
       figure.remove();
     }), 'danger');
     remove.disabled = offline || (gallery.id === 'editor-images' && editorBusy);
-    figure.append(img, element('figcaption', image.caption || ''), remove);
+    figure.append(img, remove);
     gallery.append(figure);
   }
   if (!images.length) gallery.append(element('p', 'Noch keine Bilder. Bilder unter „Bearbeiten“ hinzufügen.'));

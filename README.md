@@ -46,8 +46,8 @@ Datenbank, Geräteprüfung, private Bilder und serverseitige Funktionen.
 - **Kompakte Ansicht** zeigt nur Name und Textaktionen, ohne Bildvorschauen.
 - Der Produkteditor zeigt Kategorie direkt nach Produktnummer, Gewicht und Teile
   nebeneinander sowie Beschreibung vor Favorit und Rating.
-  Bilder lassen sich als Datei oder direkte HTTP-/HTTPS-URL
-  hinzufügen. URL-Abrufe benötigen eine CORS-Freigabe der Bildquelle.
+  Bilder lassen sich als Dateien hinzufügen und werden ohne sichtbaren
+  Dateinamen oder Titel unter dem Bild angezeigt.
 - Produktlöschung entfernt auch zugehörige Positionen und Bilder.
 
 Der schreibgeschützte **Nutzungscounter** startet bei 0 und steigt um **1 pro

@@ -7,7 +7,7 @@ const {
   productWeightLabel, filterByProductNumber,
   productStockLabel, loadProductImages, loadStockPreview, createAdditionalPosition, scheduleStockPreviews,
 } = await import('../js/inventory.js');
-const { loadImageURL, uploadImage } = await import('../js/storage.js');
+const { uploadImage } = await import('../js/storage.js');
 const { saveConnection, clearConnection, saveSnapshot, loadSnapshot } = await import('../js/auth.js');
 const { locationSelection, locationLabel } = await import('../js/locations.js');
 const { orderRecords, orderStockPositions, loadSorting, saveSorting } = await import('../js/ordering.js');
@@ -213,7 +213,7 @@ test('Katalogbestand summiert Stückzahlen über Orte und ignoriert alte Gewicht
   assert.equal(productStockLabel('fish', [{ item_id: 'fish', quantity: 0, weight_grams: 0 }]), 'Kein Bestand');
 });
 
-test('Bild-URL wird ohne Geräte-Header, Cookies oder Referrer geladen und über den WebP-Upload gespeichert', async (t) => {
+test('Bilddatei wird verkleinert und als WebP mit Bildmetadaten gespeichert', async (t) => {
   saveConnection({ inventoryId: '11111111-1111-4111-8111-111111111111', deviceId: 'test', deviceToken: 'test' });
   const previousDocument = globalThis.document;
   const previousBitmap = globalThis.createImageBitmap;
@@ -241,17 +241,10 @@ test('Bild-URL wird ohne Geräte-Header, Cookies oder Referrer geladen und über
     clearConnection();
   });
   t.mock.method(globalThis, 'fetch', async (url, options) => {
-    if (url === 'https://example.invalid/image.png') {
-      assert.equal(options.credentials, 'omit');
-      assert.equal(options.referrerPolicy, 'no-referrer');
-      assert.equal(options.mode, 'cors');
-      assert.equal(options.headers, undefined);
-      return new Response(new Uint8Array([1, 2, 3]), { headers: { 'Content-Type': 'image/png' } });
-    }
     uploaded.push({ url, options });
     return new Response(JSON.stringify({ path: 'inventory/product/image.webp' }), { status: 200 });
   });
-  const image = await loadImageURL(' https://example.invalid/image.png ');
+  const image = new File([new Uint8Array([1, 2, 3])], 'Produkt.png', { type: 'image/png' });
   await uploadImage('product', image, 2);
   assert.equal(bitmapClosed, true);
   assert.equal(uploaded.length, 2);
@@ -262,53 +255,7 @@ test('Bild-URL wird ohne Geräte-Header, Cookies oder Referrer geladen und über
   });
 });
 
-test('Bild-URL weist ungültige Adressen, Webseiten und fehlgeschlagene Downloads ausdrücklich ab', async (t) => {
-  let calls = 0;
-  t.mock.method(globalThis, 'fetch', async () => {
-    calls++;
-    return new Response('<html></html>', { headers: { 'Content-Type': 'text/html' } });
-  });
-  for (const url of ['', '/image.png', 'data:image/png;base64,YQ==', 'ftp://example.invalid/a.png',
-    'https://user:password@example.invalid/image.png']) {
-    await assert.rejects(loadImageURL(url), /Bild-URL/);
-  }
-  assert.equal(calls, 0);
-  await assert.rejects(loadImageURL('https://example.invalid/page'), /Bilddatei/);
-  t.mock.method(globalThis, 'fetch', async () => new Response('', { status: 404 }));
-  await assert.rejects(loadImageURL('https://example.invalid/missing'), /HTTP 404/);
-  t.mock.method(globalThis, 'fetch', async () => { throw new TypeError('Failed to fetch'); });
-  await assert.rejects(loadImageURL('https://example.invalid/blocked'), /CORS-Freigabe/);
-  t.mock.method(globalThis, 'fetch', async () =>
-    new Response(new Uint8Array(), { headers: { 'Content-Type': 'image/png' } }));
-  await assert.rejects(loadImageURL('https://example.invalid/empty'), /leere Bilddatei/);
-  t.mock.method(globalThis, 'fetch', async () => new Response(new ReadableStream({
-    start(controller) { controller.error(new Error('Connection interrupted')); },
-  }), { headers: { 'Content-Type': 'image/png' } }));
-  await assert.rejects(loadImageURL('https://example.invalid/interrupted'), /nicht vollständig geladen/);
-});
-
-test('Bild-URL akzeptiert exakt 25 MB und stoppt größere Downloads auch ohne Content-Length', async (t) => {
-  const maxBytes = 25 * 1024 * 1024;
-  const bytes = new Uint8Array(maxBytes);
-  t.mock.method(globalThis, 'fetch', async () =>
-    new Response(bytes, { headers: { 'Content-Type': 'image/png', 'Content-Length': String(maxBytes) } }));
-  assert.equal((await loadImageURL('https://example.invalid/max.png')).size, maxBytes);
-  t.mock.method(globalThis, 'fetch', async () =>
-    new Response('x', { headers: { 'Content-Type': 'image/png', 'Content-Length': String(maxBytes + 1) } }));
-  await assert.rejects(loadImageURL('https://example.invalid/large.png'), /maximal 25 MB/);
-  let cancelled = false;
-  t.mock.method(globalThis, 'fetch', async () => new Response(new ReadableStream({
-    start(controller) {
-      controller.enqueue(bytes);
-      controller.enqueue(new Uint8Array([1]));
-    },
-    cancel() { cancelled = true; },
-  }), { headers: { 'Content-Type': 'image/png' } }));
-  await assert.rejects(loadImageURL('https://example.invalid/stream.png'), /maximal 25 MB/);
-  assert.equal(cancelled, true);
-});
-
-test('Produktbilder werden signiert angezeigt; veraltete Dialog-Ladevorgänge ändern keine Bilder', async (t) => {
+test('Produktbilder werden ohne sichtbare Beschriftung signiert angezeigt; veraltete Dialog-Ladevorgänge ändern keine Bilder', async (t) => {
   saveConnection({ inventoryId: '11111111-1111-4111-8111-111111111111', deviceId: 'test', deviceToken: 'test' });
   const previousDocument = globalThis.document;
   const node = (tag) => ({
@@ -336,10 +283,10 @@ test('Produktbilder werden signiert angezeigt; veraltete Dialog-Ladevorgänge ä
   gallery.id = 'editor-images';
   await loadProductImages({ id: 'product', name: 'Fisch' }, gallery, () => current);
   assert.equal(gallery.children.length, 1);
-  const [image, caption, remove] = gallery.children[0].children;
+  assert.equal(gallery.children[0].children.length, 2);
+  const [image, remove] = gallery.children[0].children;
   assert.equal(image.src, 'https://example.invalid/signed-product.webp');
   assert.equal(image.alt, 'Packung');
-  assert.equal(caption.textContent, 'Packung');
   assert.equal(remove.textContent, 'Bild löschen');
   current = false;
   await loadProductImages({ id: 'old-product' }, gallery, () => current);
