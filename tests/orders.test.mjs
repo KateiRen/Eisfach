@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 globalThis.document = { querySelector: () => null };
-const { orderQuantity, reorderProduct, changeOrder, orderAmounts, orderAmountLabel } = await import('../js/orders.js');
+const { orderQuantity, reorderProduct, changeOrder, orderAmounts, orderAmountLabel,
+  steppedOrderQuantity, receiveOrder } = await import('../js/orders.js');
 const { saveConnection, clearConnection } = await import('../js/auth.js');
 const storage = new Map();
 globalThis.localStorage = {
@@ -17,6 +18,45 @@ test('Bestellmengen erlauben nur positive ganze Stückzahlen im Integer-Bereich'
   for (const invalid of ['', ' ', 0, -1, 1.5, '1e2', 2147483648, null, undefined, true]) {
     assert.throws(() => orderQuantity(invalid), /Bestellmenge/);
   }
+});
+
+test('Mengenschritte speichern plus/minus eins und entfernen bei Minus von eins', () => {
+  assert.equal(steppedOrderQuantity(2, 1), 3);
+  assert.equal(steppedOrderQuantity(2, -1), 1);
+  assert.equal(steppedOrderQuantity(1, -1), null);
+  assert.equal(steppedOrderQuantity(2147483646, 1), 2147483647);
+  for (const [quantity, step] of [[2147483647, 1], [0, 1], [2, 0], [2, 2]]) {
+    assert.throws(() => steppedOrderQuantity(quantity, step));
+  }
+});
+
+test('Einlagerung sendet Bestand und Bestellabzug als eine wiederholbare RPC und meldet Fehler', async (t) => {
+  saveConnection({ inventoryId: '11111111-1111-4111-8111-111111111111', deviceId: 'd', deviceToken: 't' });
+  t.after(clearConnection);
+  const entry = { id: 'order', item_id: 'fish', quantity: 3, updated_at: '2026-11-16T22:00:00Z' };
+  const position = { id: 'position', item_id: 'fish', location_id: 'cellar', compartment_id: null, quantity: 2 };
+  let posts = 0;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    assert.ok(url.endsWith('/rest/v1/rpc/receive_order'));
+    assert.equal(options.method, 'POST');
+    assert.deepEqual(JSON.parse(options.body), {
+      p_order_id: entry.id, p_item_id: 'fish', p_updated_at: entry.updated_at,
+      p_id: 'position', p_location_id: 'cellar', p_compartment_id: null, p_quantity: 2,
+    });
+    posts++;
+    if (posts === 1) throw new Error('Antwort verloren');
+    if (posts === 3) return Response.json({ message: 'Bestelleintrag wurde zwischenzeitlich geändert.' }, { status: 400 });
+    if (posts === 4) return Response.json([]);
+    return Response.json([position]);
+  });
+  for (const invalid of [{ ...position, quantity: 0 }, { ...position, quantity: 4 },
+    { ...position, item_id: 'other' }]) await assert.rejects(receiveOrder(entry, invalid));
+  await assert.rejects(receiveOrder({ ...entry, updated_at: null }, position));
+  assert.equal(posts, 0);
+  await assert.rejects(receiveOrder(entry, position), /Antwort verloren/);
+  assert.deepEqual(await receiveOrder(entry, position), position);
+  await assert.rejects(receiveOrder(entry, position), /zwischenzeitlich geändert/);
+  await assert.rejects(receiveOrder(entry, position), /nicht bestätigt/);
 });
 
 test('Positionspreise und Total rechnen centgenau mit gespeicherten Mengen, auch über dem sicheren Number-Bereich', () => {

@@ -179,6 +179,16 @@ Bestellwunsch, kein idempotenter Retry. Die App wiederholt ihn nicht automatisch
 Die Bestellliste speichert keine historischen Preise, sondern zeigt den
 aktuellen Produktpreis. Eintragslöschung verändert weder Produkt noch Bestand.
 
+`receive_order()` lagert eine positive Teilmenge bis zur offenen Bestellmenge
+in einer Transaktion ein: `create_stock_position()` erzeugt die Position und
+erhöht den Nutzungscounter; danach wird die Bestellmenge reduziert oder der
+vollständig eingelagerte Eintrag gelöscht. Ein veralteter Änderungsstand,
+ungültiger Lagerort oder Zählerüberlauf bricht die gesamte Transaktion ab.
+Wiederholungen mit derselben Positions-ID und unveränderten Positionsdaten
+erzeugen weder eine zweite Position noch einen zweiten Bestellabzug.
+Bestehende Datenbanken ergänzen die Funktion einmalig mit
+[update_order_receiving.sql](../supabase/update_order_receiving.sql).
+
 ## 5. `storage_locations` – definierte Lagerorte
 
 | Feld | Typ | NULL | Default | Bedeutung / Prüfung |

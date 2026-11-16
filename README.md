@@ -62,17 +62,24 @@ Datenbank, Geräteprüfung, private Bilder und serverseitige Funktionen.
 Jeder Klick setzt ein Stück zusätzlich auf die gemeinsame, inventargebundene
 **Bestellliste** im Header/Menü. Pro Produkt gibt es genau einen Eintrag;
 gleichzeitige Klicks verschiedener Geräte werden atomar addiert.
-In der Bestellliste lassen sich positive ganze Stückzahlen speichern und
-Einträge entfernen. Die Ansicht ist immer eine kompakte Tabelle mit Produkt,
+In der Bestellliste ändern **−/+** die Menge um ein Stück und speichern sofort.
+**Minus bei 1 entfernt den Eintrag.** Die Ansicht ist immer eine kompakte Tabelle mit Produkt,
 Menge, aktuellem Stückpreis und Gesamtpreis pro Position. Unter der
 Gesamtpreis-Spalte steht das **Total** aller Positionen. Die Berechnung erfolgt
-centgenau anhand der gespeicherten Mengen; Mengenänderungen zuerst speichern.
+centgenau anhand der gespeicherten Mengen und wird nach jeder Änderung aktualisiert.
 Fehlende Stückpreise werden als „—“ angezeigt und verhindern die Berechnung
 des Totals, statt als 0 Euro einzugehen. Kostenlose Produkte mit Preis 0
 werden dagegen regulär berücksichtigt. Auf schmalen Bildschirmen ist die
 Tabelle seitlich scrollbar.
-Bestand und Nutzungscounter bleiben unverändert; eine Einlagerung erfolgt
-weiterhin separat. Die Bestellliste benötigt Internet und lässt sich über
+**Produkt aktualisieren** öffnet den Produkteditor für Preis und Produktdaten;
+nach Speichern oder Schließen kehrt die App zur Bestellliste zurück.
+**Einlagern** öffnet die Bestandserfassung mit der offenen Bestellmenge als
+Vorgabe. Ort/Fach auswählen und gegebenenfalls eine kleinere Teilmenge eingeben.
+Speichern legt atomar eine Bestandsposition an und zieht die Menge von der
+Bestellliste ab; bei vollständiger Einlagerung verschwindet der Eintrag.
+Der Nutzungscounter steigt dabei wie bei jeder neuen Bestandsposition um 1.
+Abbrechen verändert nichts. Reine Bestellmengenänderungen verändern den Bestand
+und Nutzungscounter weiterhin nicht. Die Bestellliste benötigt Internet und lässt sich über
 **Aktualisieren** neu laden. Bei unklarer Netzwerkantwort vor einem erneuten
 Klick die Bestellliste prüfen, damit nicht versehentlich doppelt bestellt wird.
 
@@ -287,6 +294,12 @@ nach dem obigen Metadaten-Update. Bereits auf diesem Stand befindliche
 Installationen benötigen nur dieses neue Update. Bestehende Produkte behalten
 einen leeren Preis; die Bestellliste beginnt leer.
 
+Für das direkte Einlagern aus der Bestellliste danach
+[update_order_receiving.sql](./supabase/update_order_receiving.sql) einmalig
+ausführen, bevor die zugehörige Oberfläche veröffentlicht wird. Es ergänzt die
+atomare, versionsgeprüfte `receive_order`-Funktion. Frische Datenbanken benötigen
+weiterhin nur das aktuelle vollständige Schema.
+
 ### 2. Oberfläche bereitstellen
 
 Für GitHub Pages unter **Settings → Pages → Build and deployment**:
@@ -410,6 +423,7 @@ psql "$env:TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase\tests\storage_locat
 psql "$env:TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase\tests\inventory_sorting.sql
 psql "$env:TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase\tests\item_metadata.sql
 psql "$env:TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase\tests\product_orders.sql
+psql "$env:TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase\tests\order_receiving.sql
 ```
 
 Die SQL-Tests verwerfen ihre Testdaten per `ROLLBACK`. Für eine Freigabe zusätzlich

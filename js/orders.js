@@ -52,9 +52,33 @@ export async function changeOrder(entry, quantity) {
   return saved[0];
 }
 
+export function steppedOrderQuantity(quantity, step) {
+  const current = orderQuantity(quantity);
+  if (step !== -1 && step !== 1) throw new Error('Die Bestellmenge kann nur um ein Stück geändert werden.');
+  return current === 1 && step === -1 ? null : orderQuantity(current + step);
+}
+
+export async function receiveOrder(entry, position) {
+  const quantity = orderQuantity(position.quantity);
+  if (!entry.updated_at || entry.item_id !== position.item_id || quantity > entry.quantity) {
+    throw new Error('Bitte die Bestellliste aktualisieren und höchstens die offene Bestellmenge einlagern.');
+  }
+  const saved = await rest('rpc/receive_order', '', { method: 'POST', body: {
+    p_order_id: entry.id, p_item_id: entry.item_id, p_updated_at: entry.updated_at,
+    p_id: position.id, p_location_id: position.location_id,
+    p_compartment_id: position.compartment_id, p_quantity: quantity,
+  } });
+  if (saved?.length !== 1 || saved[0].id !== position.id) {
+    throw new Error('Einlagerung konnte nicht bestätigt werden. Bitte mit denselben Werten erneut versuchen.');
+  }
+  return saved[0];
+}
+
 function updateControls() {
   const disabled = busy || !available || !navigator.onLine;
-  for (const control of document.querySelectorAll('#orders button, #orders input')) control.disabled = disabled;
+  for (const control of document.querySelectorAll('#orders button')) {
+    control.disabled = disabled || control.dataset.atLimit === 'true';
+  }
   document.querySelector('#reload-orders').disabled = busy || !navigator.onLine;
 }
 
@@ -79,22 +103,27 @@ async function refresh() {
     product.scope = 'row';
     product.append(element('span', item.product_number || '—', 'muted'));
     const quantity = element('td');
-    const input = element('input');
-    input.type = 'number';
-    input.min = '1';
-    input.max = '2147483647';
-    input.step = '1';
-    input.required = true;
-    input.value = entry.quantity;
-    input.setAttribute('aria-label', `Bestellmenge: ${item.name}`);
-    quantity.append(input);
+    const control = element('div', undefined, 'quantity-control');
+    const down = action('−', () => runChange(entry, steppedOrderQuantity(entry.quantity, -1)));
+    const up = action('+', () => runChange(entry, steppedOrderQuantity(entry.quantity, 1)));
+    down.setAttribute('aria-label', `Bestellmenge verringern: ${item.name}`);
+    up.setAttribute('aria-label', `Bestellmenge erhöhen: ${item.name}`);
+    up.dataset.atLimit = String(entry.quantity >= 2147483647);
+    const amount = element('output', String(entry.quantity), 'quantity');
+    amount.setAttribute('aria-label', `Bestellmenge: ${item.name}`);
+    control.append(down, amount, up);
+    quantity.append(control);
     const actions = element('td');
     const buttons = element('div', undefined, 'actions compact-actions');
-    const save = action('Speichern', () => runChange(entry, input.value));
-    const remove = action('Entfernen', () => runChange(entry, null), 'danger');
-    save.setAttribute('aria-label', `Menge speichern: ${item.name}`);
-    remove.setAttribute('aria-label', `Entfernen: ${item.name}`);
-    buttons.append(save, remove);
+    const edit = action('Produkt aktualisieren', () => {
+      location.assign(`./app.html?edit-product=${encodeURIComponent(item.id)}#catalog`);
+    });
+    const store = action('Einlagern', () => {
+      location.assign(`./app.html?receive-order=${encodeURIComponent(entry.id)}#catalog`);
+    });
+    edit.setAttribute('aria-label', `Produkt aktualisieren: ${item.name}`);
+    store.setAttribute('aria-label', `Einlagern: ${item.name}`);
+    buttons.append(edit, store);
     actions.append(buttons);
     row.append(product, quantity, element('td', priceLabel(item.price), 'order-price'),
       element('td', orderAmountLabel(totals.amounts[index]), 'order-price'), actions);

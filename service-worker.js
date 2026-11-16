@@ -1,4 +1,4 @@
-const CACHE = 'eisfach-shell-v35';
+const CACHE = 'eisfach-shell-v36';
 const SHELL = [
   './', './index.html', './setup.html', './app.html', './devices.html', './freezer.html', './sorting.html', './bulk-edit.html', './appearance.html', './transfer.html',
   './orders.html', './js/orders.js',

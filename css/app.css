@@ -113,7 +113,8 @@ body[data-page="bulk-edit"] main { max-width: none; }
 .order-table th, .order-table td { padding: .5rem; text-align: left; border-bottom: 1px solid #cfe0e1; }
 .order-table tbody th { min-width: 10rem; overflow-wrap: anywhere; }
 .order-table tbody th span { display: block; font-size: .8rem; font-weight: 400; }
-.order-table input { width: 5.5rem; margin: 0; padding: .5rem; }
+.order-table .quantity-control { margin: 0; gap: .25rem; }
+.order-table .quantity { font-size: 1rem; font-variant-numeric: tabular-nums; }
 .order-table .order-price { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .order-table tfoot th { text-align: right; }
 .order-table tfoot th, .order-table tfoot td { border-top: 2px solid #8aafb2; font-weight: 700; }

@@ -5,7 +5,7 @@ import { element, action, status } from './app.js';
 import { locationLabel, populateCompartments, locationSelection } from './locations.js';
 import { loadSorting, compareOrder, orderRecords, orderStockPositions } from './ordering.js';
 import { productDetails, productNumberSearch, thawingTimeLabel, optionalInteger, optionalWeight, optionalPrice, priceLabel } from './product.js';
-import { reorderProduct } from './orders.js';
+import { reorderProduct, receiveOrder } from './orders.js';
 
 export { optionalInteger, optionalWeight } from './product.js';
 
@@ -31,6 +31,8 @@ let stockBusy = false;
 let stockImageVersion = 0;
 let stockAction = null;
 let stockCreatingId = null;
+let receivingOrder = null;
+let returnToOrders = false;
 const form = () => document.querySelector('#item-form');
 const dialog = () => document.querySelector('#item-dialog');
 const stockForm = () => document.querySelector('#stock-form');
@@ -573,15 +575,20 @@ function populateStockProducts(preferredId = stockForm().elements.item_id.value)
 function updateStockProduct() {
   const product = items.find((item) => item.id === stockForm().elements.item_id.value);
   const editing = Boolean(stockEditingEntry);
-  document.querySelector('#stock-product-picker').hidden = editing;
-  document.querySelector('#stock-product-details').hidden = !editing;
+  const receiving = Boolean(receivingOrder);
+  document.querySelector('#stock-product-picker').hidden = editing || receiving;
+  document.querySelector('#stock-product-details').hidden = !editing && !receiving;
   document.querySelector('#stock-location-picker').hidden = editing;
   document.querySelector('#stock-current-location').hidden = !editing;
   document.querySelector('#stock-position-actions').hidden = !editing;
   document.querySelector('#stock-quantity-label').textContent = editing ? 'Stückzahl dieser Position' : 'Stückzahl';
   document.querySelector('#stock-title').textContent = editing ? product?.name || 'Produkt nicht verfügbar' : 'Bestand hinzufügen';
-  if (editing) {
+  stockForm().elements.quantity.min = receiving ? '1' : '0';
+  stockForm().elements.quantity.max = receiving ? String(receivingOrder.quantity) : '2147483647';
+  if (receiving) document.querySelector('#stock-title').textContent = `Einlagern: ${product?.name || 'Produkt nicht verfügbar'}`;
+  if (editing || receiving) {
     document.querySelector('#stock-subtitle').textContent = `Produktnummer: ${product?.product_number || '—'}`;
+    if (receiving) document.querySelector('#stock-subtitle').textContent += ` · Offen: ${receivingOrder.quantity} Stück`;
     document.querySelector('#stock-description').textContent = product?.description || 'Keine Beschreibung vorhanden.';
     for (const [name, text] of Object.entries(stockTimeLabels(product))) {
       const field = document.querySelector(`#stock-${name}`);
@@ -591,7 +598,7 @@ function updateStockProduct() {
     const metadata = document.querySelector('#stock-product-metadata');
     metadata.replaceChildren();
     appendProductDetails(metadata, product || {}, true);
-    updateStockLocation();
+    if (editing) updateStockLocation();
     const version = ++stockImageVersion;
     const preview = document.querySelector('#stock-detail-image');
     preview.replaceChildren();
@@ -613,8 +620,8 @@ function updateStockActions() {
   document.querySelector('#cancel-stock').disabled = stockBusy;
   document.querySelector('#stock-new-item').disabled = stockBusy || offline;
   const quantity = Number(stockForm().elements.quantity.value);
-  document.querySelector('#quantity-down').disabled = stockBusy || offline || quantity <= 0;
-  document.querySelector('#quantity-up').disabled = stockBusy || offline || quantity >= 2147483647;
+  document.querySelector('#quantity-down').disabled = stockBusy || offline || quantity <= Number(stockForm().elements.quantity.min);
+  document.querySelector('#quantity-up').disabled = stockBusy || offline || quantity >= Number(stockForm().elements.quantity.max);
   const remove = document.querySelector('#delete-stock');
   remove.hidden = !stockEditingEntry;
   remove.disabled = stockBusy || offline;
@@ -726,7 +733,9 @@ async function saveStock(event) {
     if (creating) body.inventory_id = loadConnection().inventoryId;
     const filter = creating ? '' : `?id=eq.${encodeURIComponent(fields.id)}&updated_at=eq.${encodeURIComponent(stockEditingVersion)}`;
     const saved = creating
-      ? [await createAdditionalPosition({ ...body, id: stockCreatingId })]
+      ? [await (receivingOrder
+        ? receiveOrder(receivingOrder, { ...body, id: stockCreatingId })
+        : createAdditionalPosition({ ...body, id: stockCreatingId }))]
       : await rest('stock_entries', filter, {
         method: 'PATCH', body, headers: { Prefer: 'return=representation' },
       });
@@ -735,7 +744,7 @@ async function saveStock(event) {
       throw new Error('Position wurde zwischenzeitlich geändert oder entfernt. Bitte schließen und erneut öffnen.');
     }
     stockDialog().close();
-    await refresh();
+    if (!returnToOrders) await refresh();
   } catch (error) {
     if (stockDialog().open) feedback.textContent = error.message;
     else status(`Gespeichert, aber die Liste konnte nicht aktualisiert werden: ${error.message}`);
@@ -866,6 +875,7 @@ export async function initInventory() {
   dialog().addEventListener('close', () => {
     editorImageVersion++;
     document.querySelector('#editor-images').replaceChildren();
+    if (returnToOrders) location.assign('./orders.html');
   });
   stockDialog().addEventListener('cancel', (event) => {
     if (stockBusy) event.preventDefault();
@@ -873,6 +883,7 @@ export async function initInventory() {
   stockDialog().addEventListener('close', () => {
     stockImageVersion++;
     document.querySelector('#stock-detail-image').replaceChildren();
+    if (returnToOrders) location.assign('./orders.html');
   });
   stockActionDialog().addEventListener('cancel', (event) => {
     if (stockBusy) event.preventDefault();
@@ -885,4 +896,27 @@ export async function initInventory() {
       stockForm().elements.location_id.value);
   });
   await refresh();
+  const parameters = new URLSearchParams(location.search);
+  const productId = parameters.get('edit-product');
+  const orderId = parameters.get('receive-order');
+  if (productId || orderId) {
+    if (offline) throw new Error('Diese Aktion benötigt eine Internetverbindung. Bitte zur Bestellliste zurückkehren.');
+    if (orderId) {
+      const entries = await rest('order_entries', `?id=eq.${encodeURIComponent(orderId)}&select=*`);
+      const entry = entries?.[0];
+      if (!entry || !items.some((item) => item.id === entry.item_id)) {
+        throw new Error('Bestelleintrag nicht mehr verfügbar. Bitte zur Bestellliste zurückkehren und aktualisieren.');
+      }
+      receivingOrder = entry;
+      returnToOrders = true;
+      editStock(null, entry.item_id);
+      stockForm().elements.quantity.value = entry.quantity;
+      updateStockActions();
+    } else {
+      const item = items.find((item) => item.id === productId);
+      if (!item) throw new Error('Produkt nicht mehr verfügbar. Bitte zur Bestellliste zurückkehren und aktualisieren.');
+      returnToOrders = true;
+      await editItem(item);
+    }
+  }
 }
