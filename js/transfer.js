@@ -3,13 +3,15 @@ import { loadConnection } from './auth.js';
 import { status } from './app.js';
 import { createZip, readZip, MAX_ZIP_SIZE } from './zip.js';
 import { downloadImage, restoreImage, validateWebP } from './storage.js';
+import { productDetails } from './product.js';
 
 const TABLES = ['storage_locations', 'storage_compartments', 'items', 'stock_entries'];
 const FIELDS = {
   storage_locations: ['id', 'name'],
   storage_compartments: ['id', 'location_id', 'name'],
   items: ['id', 'name', 'product_number', 'weight_grams', 'description', 'category',
-    'preparation_minutes', 'thawing_minutes', 'qr_code', 'notes'],
+    'preparation_minutes', 'thawing_minutes', 'qr_code', 'notes',
+    'product_url', 'parts', 'favorite', 'usage_count', 'rating'],
   stock_entries: ['id', 'item_id', 'location_id', 'compartment_id', 'quantity'],
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -43,6 +45,7 @@ export function validateBackup(data) {
           [...clean.name].length <= 200, `${table}: Name muss 1–200 Zeichen enthalten.`);
       }
       if (table === 'items') {
+        Object.assign(clean, productDetails(clean));
         for (const field of ['product_number', 'description', 'category', 'notes']) {
           requireValue(typeof clean[field] === 'string', `items: ${field} muss Text sein.`);
         }

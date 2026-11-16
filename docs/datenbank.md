@@ -113,13 +113,18 @@ verbraucht den Code atomar unter Zeilensperre; beim letzten Verbrauch wird
 | `inventory_id` | uuid | nein | keiner | FK auf `inventories.id`, `ON DELETE CASCADE` |
 | `name` | text | nein | keiner | Produktname; getrimmt 1–200 Zeichen |
 | `product_number` | text | nein | `''` | Optionale Produktnummer; maximal 100 Zeichen; führende Nullen bleiben erhalten |
+| `product_url` | text | ja | keiner | Optionale Produktseite; SQL verlangt HTTP-/HTTPS-Präfix ohne Leerraum; die App prüft eine vollständige URL ohne Zugangsdaten |
+| `parts` | text | ja | keiner | Optionaler Teile-Text, z. B. „6–8“ oder „2 Beutel“ |
+| `favorite` | boolean | ja | keiner | Optionaler Favorit-Status: `true`, `false` oder nicht angegeben (`NULL`) |
+| `usage_count` | integer | nein | `0` | Nutzungscounter, nichtnegativ; darf durch Updates nicht kleiner werden |
+| `rating` | integer | ja | keiner | Optionale Bewertung, einschließlich 0 und 5 |
 | `weight_grams` | numeric(12,3) | ja | keiner | Gewicht einer Packung in Gramm, 0 ≤ Wert < 1000000000 |
 | `description` | text | nein | `''` | Produktbeschreibung |
 | `category` | text | nein | `''` | Freie Kategorie; leer entspricht „Ohne Kategorie“ |
 | `preparation_minutes` | integer | ja | keiner | Zubereitungszeit, nichtnegativ; `NULL` unbekannt, 0 zulässig |
-| `thawing_minutes` | integer | ja | keiner | Auftauzeit, nichtnegativ; in der Oberfläche „Vorbereitungszeit“ |
+| `thawing_minutes` | integer | ja | keiner | Auftauzeit in Minuten, nichtnegativ; Anzeige über 60 Minuten als Stunden und Restminuten |
 | `qr_code` | text | ja | keiner | Gespeicherter Produkt-QR-Inhalt; neue UI-Produkte erhalten `eisfach:item:<id>` |
-| `notes` | text | nein | `''` | Notizen; die UI liest „Teile“ aus einer `Teile:`-Zeile |
+| `notes` | text | nein | `''` | Notizen, unabhängig vom eigenen Teile-Feld |
 | `created_at` | timestamptz | nein | `now()` | Anlagezeitpunkt |
 | `updated_at` | timestamptz | nein | `now()` | Änderungsstand; Trigger bei jedem Update |
 
@@ -129,7 +134,23 @@ Es gibt keine Unique-Regel für Name, Produktnummer oder QR-Code.
 Die Datenbank kann numerische Eingaben auf drei Nachkommastellen runden;
 die App validiert beim Bearbeiten/Import vorab höchstens drei.
 Gewicht und Zeiten sind vom tatsächlichen Bestand unabhängig.
-Eine eigene numerische Teile-Spalte oder Stückzahl am Produkt gibt es nicht.
+Teile sind bewusst Text und keine numerische Stückzahl.
+Der Nutzungscounter ist nicht die Bestandsmenge: `create_stock_position()`
+erhöht ihn um 1 pro neu angelegter Position, einschließlich Menge 0.
+Ein stabiler Request-/Positionsschlüssel verhindert doppelte Erhöhungen
+bei Wiederholung. Die Funktion sperrt das Produkt für konkurrierende
+Erfassungen und führt Insert und Increment in derselben Transaktion aus.
+Bei Integer-Überlauf wird auch die neue Position zurückgerollt.
+Direkte Bestandsinserts (Import), Umlagerung, Bearbeitung und Löschung verändern
+den Zähler nicht. Der Trigger `items_usage_count` verhindert Zählerreduktionen.
+Neue importierte Produkte dürfen ihren gesicherten Zähler als Initialwert erhalten;
+bestehende Produkte werden beim Import nicht überschrieben.
+
+Für eine bestehende Datenbank auf dem vorherigen Stand ergänzt
+[update_item_metadata.sql](../supabase/update_item_metadata.sql) diese Felder
+und Funktionen. `parts` wird aus passenden `Teile:`-Notizzeilen übernommen,
+Notizen bleiben erhalten; Zähler beginnen bei 0. Das Update gehört nicht zur
+Initialisierung einer neuen Datenbank.
 
 ## 5. `storage_locations` – definierte Lagerorte
 
@@ -286,6 +307,8 @@ Registrierung und den SHA-256-Hash. Fehlerhafte/fehlende Zugangsdaten ergeben
 | --- | --- | --- |
 | `current_inventory_id()` | Browserrollen; uuid oder NULL | Aktives Gerät aus Request-Headern prüfen |
 | `touch_device()` | Browserrollen; void | Berechtigtes Gerät prüfen und `last_seen_at` aktualisieren |
+| `create_stock_position(p_id uuid, p_item_id uuid, p_location_id uuid, p_compartment_id uuid, p_quantity integer)` | Browserrollen; Bestandsposition als SETOF | Idempotente Positionserfassung und atomare Erhöhung von `usage_count`; arbeitet mit den bestehenden RLS-Rechten, nicht als SECURITY DEFINER |
+| `preserve_item_usage_count()` | Nur Trigger | Verhindert eine Reduktion von `items.usage_count` |
 | `can_access_inventory_image(p_path text)` | Browserrollen/Policies; boolean | Inventar und Produktzuordnung eines Bildpfads prüfen |
 | `delete_storage_location(p_location_id uuid, p_compartment_id uuid, p_updated_at timestamptz, p_target_location_id uuid, p_target_compartment_id uuid)` | Browserrollen; integer | Ort oder Fach versionsgeprüft löschen; betroffene Positionen atomar verschieben, Anzahl zurückgeben |
 | `setup_inventory(p_name text, p_description text, p_device_name text)` | Nur service_role; Inventar-ID, Geräte-ID, Gerätegeheimnis | Inventar und erstes Gerät atomar anlegen |

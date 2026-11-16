@@ -4,6 +4,7 @@ import { uploadImage, imageURL, removeImage, loadImageURL } from './storage.js';
 import { element, action, status } from './app.js';
 import { locationLabel, populateCompartments, locationSelection } from './locations.js';
 import { loadSorting, compareOrder, orderRecords, orderStockPositions } from './ordering.js';
+import { productDetails, thawingTimeLabel } from './product.js';
 
 let items = [];
 let stockEntries = [];
@@ -26,6 +27,7 @@ let stockEditingEntry = null;
 let stockBusy = false;
 let stockImageVersion = 0;
 let stockAction = null;
+let stockCreatingId = null;
 const form = () => document.querySelector('#item-form');
 const dialog = () => document.querySelector('#item-dialog');
 const stockForm = () => document.querySelector('#stock-form');
@@ -40,7 +42,7 @@ export function hasStock(entry) {
 export function matchesProduct(item, search, category, locationNames = []) {
   const query = search.toLocaleLowerCase('de');
   return (!category || item.category === category) &&
-    [item.name, item.product_number, item.description, item.category, item.notes, item.qr_code, ...locationNames]
+    [item.name, item.product_number, item.parts, item.description, item.category, item.notes, item.qr_code, ...locationNames]
       .some((value) => String(value || '').toLocaleLowerCase('de').includes(query));
 }
 
@@ -65,7 +67,7 @@ export function productWeightLabel(item) {
 }
 
 export function productPackInfo(item = {}) {
-  const parts = (item.notes || '').match(/^Teile:[ \t]*([^\r\n]*)/mi)?.[1].trim() || '—';
+  const parts = productDetails(item).parts || '—';
   return { parts, weight: productWeightLabel(item) };
 }
 
@@ -229,6 +231,7 @@ function render() {
         element('p', `Produktnummer: ${item.product_number || '—'}`, 'muted'),
         element('p', `Teile: ${pack.parts} · Gewicht: ${pack.weight}`, 'muted'),
         element('p', productStockLabel(item.id, stockEntries)));
+      appendProductDetails(info, item);
       const buttons = element('div', undefined, 'actions compact-actions');
       const edit = action('Bearbeiten', () => editItem(item));
       const add = action('Einlagern', () => editStock(null, item.id));
@@ -249,7 +252,7 @@ function render() {
     heading.append(edit);
     info.append(heading,
       element('p', `Zubereitungszeit: ${item.preparation_minutes != null ? `${item.preparation_minutes} Min.` : '—'}`),
-      element('p', `Vorbereitungszeit: ${item.thawing_minutes != null ? `${item.thawing_minutes} Min.` : ''}`),
+      element('p', `Auftauzeit: ${thawingTimeLabel(item.thawing_minutes)}`),
       element('p', `Gewicht pro Packung: ${productWeightLabel(item)}`),
       element('p', `Ort: ${label(entry)}`));
     card.append(preview, info);
@@ -272,6 +275,20 @@ function render() {
     });
   document.querySelector('#items').replaceChildren(...content);
   scheduleStockPreviews(previews, () => version === renderVersion);
+}
+
+function appendProductDetails(container, item) {
+  const details = productDetails(item);
+  const favorite = details.favorite === null ? '—' : details.favorite ? 'Ja' : 'Nein';
+  container.append(element('p', `Favorit: ${favorite} · Rating: ${details.rating === null ? '—' : `${details.rating}/5`}`, 'muted'),
+    element('p', `Nutzungscounter: ${details.usage_count}`, 'muted'));
+  if (details.product_url) {
+    const link = element('a', 'Produktseite');
+    link.href = details.product_url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    container.append(link);
+  }
 }
 
 export function scheduleStockPreviews(previews, isCurrent) {
@@ -377,6 +394,12 @@ async function editItem(item) {
   for (const key of ['id', 'name', 'product_number', 'weight_grams', 'description', 'category', 'notes', 'preparation_minutes', 'thawing_minutes']) {
     form().elements[key].value = item?.[key] ?? '';
   }
+  const details = productDetails(item || {});
+  form().elements.product_url.value = details.product_url ?? '';
+  form().elements.parts.value = details.parts ?? '';
+  form().elements.favorite.value = details.favorite === null ? '' : String(details.favorite);
+  form().elements.rating.value = details.rating ?? '';
+  document.querySelector('#item-usage-count').textContent = String(details.usage_count);
   document.querySelector('#editor-title').textContent = item ? 'Produkt bearbeiten' : 'Produkt anlegen';
   document.querySelector('#editor-status').textContent = '';
   updateGoogleSearch();
@@ -446,6 +469,13 @@ async function saveItem(event) {
     body.preparation_minutes = optionalInteger(fields.preparation_minutes);
     body.thawing_minutes = optionalInteger(fields.thawing_minutes);
     body.weight_grams = optionalWeight(fields.weight_grams);
+    const details = productDetails({
+      product_url: fields.product_url.trim(), parts: fields.parts.trim() || null,
+      favorite: fields.favorite === '' ? null : fields.favorite === 'true',
+      rating: fields.rating === '' ? null : Number(fields.rating),
+    });
+    const { usage_count, ...editableDetails } = details;
+    Object.assign(body, editableDetails);
     if (!body.name) throw new Error('Ein Name ist erforderlich.');
     const urlImage = fields.image_url.trim() ? await loadImageURL(fields.image_url) : null;
     if (creating) {
@@ -504,6 +534,7 @@ async function deleteItem(item) {
 function editStock(entry, itemId) {
   stockEditingEntry = entry || null;
   stockEditingVersion = entry?.updated_at || null;
+  stockCreatingId = entry ? null : crypto.randomUUID();
   stockForm().reset();
   stockForm().elements.id.value = entry?.id ?? '';
   populateStockProducts(entry?.item_id ?? itemId);
@@ -547,7 +578,10 @@ function updateStockProduct() {
     document.querySelector('#stock-preparation').textContent =
       `Zubereitungszeit: ${product?.preparation_minutes != null ? `${product.preparation_minutes} Min.` : '—'}`;
     document.querySelector('#stock-thawing').textContent =
-      `Vorbereitungszeit: ${product?.thawing_minutes != null ? `${product.thawing_minutes} Min.` : '—'}`;
+      `Auftauzeit: ${thawingTimeLabel(product?.thawing_minutes)}`;
+    const metadata = document.querySelector('#stock-product-metadata');
+    metadata.replaceChildren(element('p', `Teile: ${productPackInfo(product).parts}`));
+    appendProductDetails(metadata, product || {});
     updateStockLocation();
     const version = ++stockImageVersion;
     const preview = document.querySelector('#stock-detail-image');
@@ -609,16 +643,11 @@ function openStockAction(mode) {
 }
 
 export async function createAdditionalPosition(body) {
-  // A stable ID allows retry after the server saved a position but its response was lost.
-  const existing = await rest('stock_entries', `?id=eq.${body.id}&select=*`);
-  if (existing.length) {
-    if (['item_id', 'location_id', 'compartment_id', 'quantity'].some((field) => existing[0][field] !== body[field])) {
-      throw new Error('Diese zusätzliche Position wurde bereits mit anderen Werten gespeichert. Bitte schließen und die Liste prüfen.');
-    }
-    return existing[0];
-  }
-  const saved = await rest('stock_entries', '', {
-    method: 'POST', body, headers: { Prefer: 'return=representation' },
+  const saved = await rest('rpc/create_stock_position', '', {
+    method: 'POST', body: {
+      p_id: body.id, p_item_id: body.item_id, p_location_id: body.location_id,
+      p_compartment_id: body.compartment_id, p_quantity: body.quantity,
+    },
   });
   if (!saved?.length) throw new Error('Die zusätzliche Position konnte nicht bestätigt werden. Bitte erneut versuchen.');
   return saved[0];
@@ -662,6 +691,7 @@ async function saveStockAction(event) {
       ? 'Position umgelagert. Ungespeicherte Stückzahländerungen bitte mit Speichern übernehmen.'
       : 'Zusätzliche Bestandsposition gespeichert.';
     await refresh();
+    updateStockProduct();
   } catch (error) {
     if (savedSuccessfully) document.querySelector('#stock-status').textContent = `Gespeichert, aber die Liste konnte nicht aktualisiert werden: ${error.message}`;
     else feedback.textContent = error.message;
@@ -686,9 +716,11 @@ async function saveStock(event) {
       ...locationSelection(fields, locations, compartments), ...stockValues(fields) } : stockValues(fields);
     if (creating) body.inventory_id = loadConnection().inventoryId;
     const filter = creating ? '' : `?id=eq.${encodeURIComponent(fields.id)}&updated_at=eq.${encodeURIComponent(stockEditingVersion)}`;
-    const saved = await rest('stock_entries', filter, {
-      method: creating ? 'POST' : 'PATCH', body, headers: { Prefer: 'return=representation' },
-    });
+    const saved = creating
+      ? [await createAdditionalPosition({ ...body, id: stockCreatingId })]
+      : await rest('stock_entries', filter, {
+        method: 'PATCH', body, headers: { Prefer: 'return=representation' },
+      });
     if (!saved?.length) {
       await refresh();
       throw new Error('Position wurde zwischenzeitlich geändert oder entfernt. Bitte schließen und erneut öffnen.');

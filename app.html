@@ -31,6 +31,13 @@
         <input name="id" type="hidden">
         <label>Name<input name="name" required maxlength="200"></label>
         <label>Produktnummer<input name="product_number" maxlength="100"></label>
+        <label>Produktseite (optional)<input name="product_url" type="url" placeholder="https://…"></label>
+        <label>Teile (optional)<input name="parts" type="text"></label>
+        <div class="columns">
+          <label>Favorit (optional)<select name="favorite"><option value="">Nicht angegeben</option><option value="true">Ja</option><option value="false">Nein</option></select></label>
+          <label>Rating (optional, 0–5)<input name="rating" type="number" min="0" max="5" step="1"></label>
+        </div>
+        <p>Nutzungscounter: <output id="item-usage-count">0</output></p>
         <label>Gewicht pro Packung (g, optional)<input name="weight_grams" type="number" min="0" max="999999999.999" step="0.001"></label>
         <label>Beschreibung<textarea name="description" maxlength="2000"></textarea></label>
         <label>Kategorie<input name="category" maxlength="100" list="categories"></label>
@@ -71,6 +78,7 @@
           <p id="stock-description" class="stock-description"></p>
           <p id="stock-preparation"></p>
           <p id="stock-thawing"></p>
+          <div id="stock-product-metadata"></div>
         </div>
         <p id="stock-product-weight"></p>
         <div id="stock-location-picker">

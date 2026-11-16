@@ -1,8 +1,8 @@
-const CACHE = 'eisfach-shell-v24';
+const CACHE = 'eisfach-shell-v25';
 const SHELL = [
   './', './index.html', './setup.html', './app.html', './devices.html', './freezer.html', './sorting.html', './appearance.html', './transfer.html',
   './css/app.css', './js/config.js', './js/supabase.js', './js/auth.js',
-  './js/storage.js', './js/zip.js', './js/setup.js', './js/scanner.js', './js/inventory.js',
+  './js/storage.js', './js/product.js', './js/zip.js', './js/setup.js', './js/scanner.js', './js/inventory.js',
   './js/devices.js', './js/freezer.js', './js/locations.js', './js/ordering.js', './js/sorting.js', './js/appearance.js', './js/transfer.js', './js/app.js', './manifest.json', './assets/icon.svg',
   './assets/vendor/qrcode.js', './assets/vendor/jsQR.js',
 ];

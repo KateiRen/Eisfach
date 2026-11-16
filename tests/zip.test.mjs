@@ -61,11 +61,15 @@ test('Größenlimits akzeptieren exakt 100 MB ZIP und 5 MB WebP, aber kein Byte 
 
 test('ZIP exportiert alle Bilder mit Metadaten und bricht bei Downloadfehler ab', async () => {
   const progress = [];
-  const blob = await createImageArchive(fixture(), [image()], async (path) => {
+  const data = fixture();
+  const details = { product_url: 'https://example.org/erbsen', parts: '2 Beutel', favorite: false, rating: 0, usage_count: 7 };
+  Object.assign(data.items[0], details);
+  const blob = await createImageArchive(data, [image()], async (path) => {
     assert.equal(path, image().path);
     return webp();
   }, (...counts) => progress.push(counts));
   const archive = readImageArchive(new Uint8Array(await blob.arrayBuffer()));
+  for (const [key, value] of Object.entries(details)) assert.equal(archive.data.items[0][key], value);
   assert.equal(archive.images[0].caption, image().caption);
   assert.equal(archive.images[0].sort_order, 2);
   assert.deepEqual(archive.files.get(`images/${id(3)}.webp`), webp());

@@ -21,11 +21,16 @@ Datenbank, Geräteprüfung, private Bilder und serverseitige Funktionen.
 
 - Produkte mit Name, Produktnummer, Beschreibung, Kategorie, Notizen,
   Packungsgewicht, Zubereitungszeit und optionaler Auftauzeit verwalten.
+  Zusätzlich gibt es eine optionale Produktseiten-URL (HTTP/HTTPS), ein eigenes
+  Textfeld **Teile**, einen optionalen **Favorit**-Status (Ja/Nein/nicht angegeben)
+  und ein optionales ganzzahliges **Rating von 0 bis 5**.
 - Produktnummern sind Text: Führende Nullen bleiben erhalten; gleiche Nummern
   bei mehreren Produkten sind erlaubt.
 - Das Gewicht beschreibt **eine Packung**, nicht das Gesamtgewicht einer Position.
   Zeiten werden in Minuten gespeichert; unbekannte Werte sind leer, 0 ist zulässig.
-  Die Anzeige **Vorbereitungszeit** entspricht dem Feld für die Auftauzeit.
+  Die **Auftauzeit** wird bis einschließlich 60 Minuten als Minutenwert angezeigt,
+  darüber als Stunden mit Restminuten, z. B. 90 → `1 Std. 30 Min.` und
+  120 → `2 Std.`. Die Eingabe bleibt in Minuten.
 - Kategorien erscheinen als Gruppen mit der Anzahl gefundener Produkte.
   Eine Button-Leiste filtert jeweils eine Kategorie; erneutes Anklicken oder
   **Alle Kategorien** hebt die Auswahl auf.
@@ -33,12 +38,21 @@ Datenbank, Geräteprüfung, private Bilder und serverseitige Funktionen.
   **Nur mit Bestand** zeigt Produkte mit mindestens einer positiven Stückzahl.
 - Die normale Ansicht zeigt das erste Produktbild, Produktnummer, Teile,
   Packungsgewicht, summierten Bestand sowie **Bearbeiten** und **Einlagern**.
-  Teile werden aus der Notizzeile `Teile:` gelesen.
+  Produktseite, Favorit, Rating und Nutzungscounter sind ebenfalls sichtbar.
+  Teile werden im eigenen Produktfeld gepflegt.
 - **Kompakte Ansicht** zeigt nur Name und Textaktionen, ohne Bildvorschauen.
 - Der Produkteditor verwaltet Bilder und bietet eine **Google Suche** aus
   Produktnummer und Name. Bilder lassen sich als Datei oder direkte HTTP-/HTTPS-URL
   hinzufügen. URL-Abrufe benötigen eine CORS-Freigabe der Bildquelle.
 - Produktlöschung entfernt auch zugehörige Positionen und Bilder.
+
+Der schreibgeschützte **Nutzungscounter** startet bei 0 und steigt um **1 pro
+neu erfasster Position** über **Einlagern** oder **Weiteren Bestand erfassen**,
+unabhängig von der Stückzahl (auch eine neue Position mit Menge 0 zählt).
+Anlage und Zählererhöhung erfolgen atomar auf dem Server. Wiederholungen derselben
+Anfrage mit derselben Positions-ID zählen nicht erneut. Mengenänderungen,
+Umlagerungen, Positionslöschungen und Bestandsimporte erhöhen oder vermindern den
+Zähler nicht. Die Datenbank verhindert ein Herabsetzen des bestehenden Zählers.
 
 ### Bestand
 
@@ -51,7 +65,7 @@ Jede Karte zeigt erstes Produktbild, Name, Zeiten, Gewicht pro Packung und Ort/F
 Ein Klick auf den Namen öffnet den Positionsdialog mit:
 
 - Produktname als Überschrift, Produktnummer als kleinem Untertitel;
-- größerem Bild, Beschreibung, Zubereitungszeit, Vorbereitungszeit und Gewicht;
+- größerem Bild, Beschreibung, Zubereitungszeit, Auftauzeit und Gewicht;
 - aktueller Stückzahl der Position, bearbeitbar mit Minus/Plus;
 - **Umlagern**: Ort und optionales Fach wählen, dann die gesamte gespeicherte
   Position sofort verschieben, ohne ihre Stückzahl zu ändern;
@@ -132,6 +146,13 @@ Ein fehlgeschlagener Bilddownload bricht den Export ab.
 5. Anschließend Produktliste und Bestand neu laden und prüfen.
 
 Vorhandene Daten werden nicht geändert oder gelöscht; Mengen werden nicht addiert.
+Die neuen Produktfelder und der Nutzungscounter sind in JSON und ZIP enthalten.
+Beim Import eines neuen Produkts wird dessen gesicherter Zähler übernommen;
+Bestandspositionen aus dem Import erhöhen ihn nicht zusätzlich. Bestehende
+Produkte und deren Zähler werden weiterhin übersprungen.
+Alte Sicherungen ohne diese Felder bleiben lesbar: URL/Favorit/Rating sind leer,
+der Zähler ist 0 und Teile werden einmalig aus einer vorhandenen `Teile:`-Notizzeile
+in das neue Feld übernommen. Ein explizit leeres Teile-Feld bleibt leer.
 Produkte und Positionen werden anhand ihrer IDs erkannt, nicht anhand gleicher
 Namen oder Produktnummern. Gleich benannte Orte und Fächer desselben Ortes
 werden wiederverwendet. Für ein anderes Zielinventar werden IDs deterministisch
@@ -184,6 +205,16 @@ Das Repository führt ausschließlich das vollständige aktuelle Schema.
 Wiederherstellungs- oder Aktualisierungsskript. Die Entfernung alter SQL-Dateien
 ändert keine bereits betriebene Datenbank; die Git-Historie bleibt erhalten.
 Änderungen an bestehenden Installationen vorab separat planen und sichern.
+
+Für bestehende Datenbanken auf dem vorherigen aktuellen Schema:
+[update_item_metadata.sql](./supabase/update_item_metadata.sql) nach Sicherung
+und bei pausierten Schreibzugriffen **einmalig** im SQL Editor ausführen,
+anschließend die passende App-Version veröffentlichen und alle Tabs neu öffnen.
+Das Update ergänzt Produktfelder, den monotonen Zähler und die atomare
+`create_stock_position`-Funktion. Teile aus `Teile:`-Notizzeilen werden übernommen,
+die Notizen bleiben erhalten. Bestehende Zähler starten bei 0; frühere
+Einlagerungen werden nicht geschätzt. Neue Datenbanken verwenden ausschließlich
+das vollständige Schema, nicht zusätzlich dieses Update.
 
 ### 2. Oberfläche bereitstellen
 
@@ -245,6 +276,7 @@ Eine atomare Aktualisierung aller offenen Tabs ist derzeit nicht implementiert.
 | [sorting.html](./sorting.html), [appearance.html](./appearance.html), [transfer.html](./transfer.html) | Sortierung, Farben und Datenaustausch |
 | [js/app.js](./js/app.js) | Navigation, Seitenstart und Geräteprüfung |
 | [js/inventory.js](./js/inventory.js) | Produktkatalog, Positionen und Dialoge |
+| [js/product.js](./js/product.js) | Gemeinsame Produktfeldvalidierung und Auftauzeitformat |
 | [js/supabase.js](./js/supabase.js), [js/auth.js](./js/auth.js) | API-Client, lokale Verbindung und Lesekopie |
 | [js/setup.js](./js/setup.js), [js/devices.js](./js/devices.js) | Inventaranlage, Kopplung und Geräteverwaltung |
 | [js/locations.js](./js/locations.js), [js/freezer.js](./js/freezer.js) | Orts-/Fachauswahl und Verwaltung |
@@ -304,6 +336,7 @@ mit dem aktuellen Schema eingerichtet wurde:
 psql "$env:TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase\tests\product_stock.sql
 psql "$env:TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase\tests\storage_locations.sql
 psql "$env:TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase\tests\inventory_sorting.sql
+psql "$env:TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase\tests\item_metadata.sql
 ```
 
 Die SQL-Tests verwerfen ihre Testdaten per `ROLLBACK`. Für eine Freigabe zusätzlich

@@ -173,7 +173,9 @@ test('Bestand gruppiert Positionen nach Produktkategorie und erhält mehrere Ort
   ]);
 });
 
-test('Packungsgewicht stammt aus dem Produktfeld und Teile bleiben als Notiztext erhalten', () => {
+test('Packungsgewicht und Teile stammen aus Produktfeldern; alte Teile-Notizen bleiben lesbar', () => {
+  assert.equal(productPackInfo({ parts: '2 Beutel', notes: 'Teile: alter Wert' }).parts, '2 Beutel');
+  assert.equal(productPackInfo({ parts: null, notes: 'Teile: alter Wert' }).parts, '—');
   assert.deepEqual(productPackInfo({ notes: 'Gewicht: 1,25 kg\nTeile: 6-8', weight_grams: '500.125' }),
     { parts: '6-8', weight: '500,125 g' });
   assert.deepEqual(productPackInfo({ notes: 'Gewicht:\r\nTeile: 02\r\nHinweis: Gewicht: 500 g' }),
@@ -461,30 +463,32 @@ test('Bestandsvorschau zeigt nur das erste Bild, teilt Anfragen und meldet Ladef
   assert.equal(stale.textContent, 'Neuer Inhalt');
 });
 
-test('Zusätzliche Position verwendet feste ID und bestätigt einen gespeicherten Retry ohne Duplikate', async (t) => {
+test('Positionserfassung nutzt atomare RPC mit derselben ID bei Wiederholung und meldet Fehler', async (t) => {
   saveConnection({ inventoryId: '11111111-1111-4111-8111-111111111111', deviceId: 'test', deviceToken: 'test' });
   t.after(clearConnection);
   const body = {
     id: '22222222-2222-4222-8222-222222222222', inventory_id: '11111111-1111-4111-8111-111111111111',
     item_id: 'fish', location_id: 'cellar', compartment_id: null, quantity: 3,
   };
-  let saved = null;
+  const saved = { ...body, updated_at: '2026-11-16T10:00:00Z' };
   let posts = 0;
   t.mock.method(globalThis, 'fetch', async (url, options) => {
-    if (options.method === 'GET') {
-      assert.equal(new URL(url).searchParams.get('id'), `eq.${body.id}`);
-      return Response.json(saved ? [saved] : []);
-    }
+    assert.ok(url.endsWith('/rest/v1/rpc/create_stock_position'));
+    assert.equal(options.method, 'POST');
+    assert.deepEqual(JSON.parse(options.body), {
+      p_id: body.id, p_item_id: body.item_id, p_location_id: body.location_id,
+      p_compartment_id: null, p_quantity: body.quantity,
+    });
     posts++;
-    saved = { ...JSON.parse(options.body), updated_at: '2026-11-16T10:00:00Z' };
-    assert.deepEqual(saved, { ...body, updated_at: '2026-11-16T10:00:00Z' });
-    throw new Error('Antwort verloren');
+    if (posts === 1) throw new Error('Antwort verloren');
+    if (posts === 3) return Response.json({ message: 'Diese Position wurde bereits mit anderen Werten gespeichert.' }, { status: 400 });
+    return Response.json([saved]);
   });
   await assert.rejects(createAdditionalPosition(body), /Antwort verloren/);
   assert.deepEqual(await createAdditionalPosition(body), saved);
-  assert.equal(posts, 1);
-  await assert.rejects(createAdditionalPosition({ ...body, quantity: 4 }), /bereits mit anderen Werten gespeichert/);
-  assert.equal(posts, 1);
+  assert.equal(posts, 2);
+  await assert.rejects(createAdditionalPosition(body), /bereits mit anderen Werten gespeichert/);
+  assert.equal(posts, 3);
 });
 
 test('Stückzahl, Produktgewicht und Zeiten beachten Grenzen und optionale Werte', () => {

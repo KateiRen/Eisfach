@@ -67,6 +67,35 @@ test('Ungültige Werte, IDs, Versionen und Verweise werden vor dem Import abgewi
   }
 });
 
+test('Neue Produktfelder bleiben beim Austausch erhalten; alte Sicherungen erhalten Defaults ohne Bestandszählung', async () => {
+  const data = fixture();
+  Object.assign(data.items[0], {
+    product_url: 'https://example.org/erbsen', parts: '2 Beutel', favorite: false, usage_count: 7, rating: 0,
+  });
+  const backup = createBackup(data, id(1));
+  const existing = empty();
+  await importBackup(backup, id(10), existing, async (table, row) => existing[table].push(row));
+  for (const key of ['product_url', 'parts', 'favorite', 'usage_count', 'rating']) {
+    assert.equal(existing.items[0][key], data.items[0][key]);
+  }
+  assert.equal(existing.items[0].usage_count, 7);
+  const old = fixture();
+  old.items[0].notes = 'Teile: 02';
+  const restored = validateBackup(old).items[0];
+  assert.equal(restored.parts, '02');
+  assert.equal(restored.usage_count, 0);
+  assert.equal(restored.favorite, null);
+  assert.equal(restored.rating, null);
+  for (const fields of [{ rating: 6 }, { usage_count: -1 }, { product_url: 'javascript:alert(1)' },
+    { favorite: 'true' }, { parts: 5 }]) {
+    const invalid = fixture();
+    Object.assign(invalid.items[0], fields);
+    let writes = 0;
+    await assert.rejects(importBackup(invalid, id(10), empty(), async () => writes++));
+    assert.equal(writes, 0);
+  }
+});
+
 test('Import in ein anderes Inventar ordnet alle Verweise zu und ist wiederholbar', async () => {
   const existing = empty();
   const writes = [];
