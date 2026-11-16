@@ -15,6 +15,7 @@ let selectedCategory = '';
 let sorting = null;
 let renderVersion = 0;
 let previewPaths = null;
+let previewObserver = null;
 const previewURLs = new Map();
 let editingVersion = null;
 let editingItem = null;
@@ -177,6 +178,9 @@ function renderCategoryFilters(categories) {
 
 function render() {
   const version = ++renderVersion;
+  previewObserver?.disconnect();
+  previewObserver = null;
+  const previews = [];
   const search = document.querySelector('#search').value;
   const onlyWithStock = document.querySelector('#only-with-stock').checked;
   const compact = currentView === 'catalog' && document.querySelector('#compact-view').checked;
@@ -232,7 +236,8 @@ function render() {
       buttons.append(edit, add);
       info.append(buttons);
       card.append(preview, info);
-      loadStockPreview(item, preview, () => version === renderVersion);
+      previews.push({ item, preview });
+      preview.textContent = offline ? 'Bild nur online verfügbar' : 'Bild wird nachgeladen …';
       return card;
     }
     card.classList.add('stock-card');
@@ -248,7 +253,8 @@ function render() {
       element('p', `Gewicht pro Packung: ${productWeightLabel(item)}`),
       element('p', `Ort: ${label(entry)}`));
     card.append(preview, info);
-    loadStockPreview(item, preview, () => version === renderVersion);
+    previews.push({ item, preview });
+    preview.textContent = offline ? 'Bild nur online verfügbar' : 'Bild wird nachgeladen …';
     return card;
   };
   const content = groupCatalog(visible, (record) =>
@@ -265,6 +271,30 @@ function render() {
       return section;
     });
   document.querySelector('#items').replaceChildren(...content);
+  scheduleStockPreviews(previews, () => version === renderVersion);
+}
+
+export function scheduleStockPreviews(previews, isCurrent) {
+  if (!previews.length || offline) return;
+  // Yield through a paint before starting image metadata and signed-URL requests.
+  requestAnimationFrame(() => setTimeout(() => {
+    if (!isCurrent()) return;
+    if (!('IntersectionObserver' in globalThis)) {
+      for (const { item, preview } of previews) loadStockPreview(item, preview, isCurrent);
+      return;
+    }
+    const products = new Map(previews.map(({ item, preview }) => [preview, item]));
+    const observer = new IntersectionObserver((entries) => {
+      if (!isCurrent()) { observer.disconnect(); return; }
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        observer.unobserve(entry.target);
+        loadStockPreview(products.get(entry.target), entry.target, isCurrent);
+      }
+    });
+    previewObserver = observer;
+    for (const { preview } of previews) observer.observe(preview);
+  }, 0));
 }
 
 async function stockPreviewURL(itemId) {

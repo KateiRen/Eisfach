@@ -5,7 +5,7 @@ globalThis.document = { querySelector: () => null };
 const {
   hasStock, matchesProduct, optionalInteger, optionalWeight, stockValues, groupCatalog, productPackInfo,
   productWeightLabel, filterByProductNumber,
-  productStockLabel, productSearchURL, loadProductImages, loadStockPreview, createAdditionalPosition,
+  productStockLabel, productSearchURL, loadProductImages, loadStockPreview, createAdditionalPosition, scheduleStockPreviews,
 } = await import('../js/inventory.js');
 const { loadImageURL, uploadImage } = await import('../js/storage.js');
 const { saveConnection, clearConnection, saveSnapshot, loadSnapshot } = await import('../js/auth.js');
@@ -357,6 +357,54 @@ test('Produktbilder werden signiert angezeigt; veraltete Dialog-Ladevorgänge ä
   invalidateOnSign = true;
   await loadProductImages({ id: 'product' }, gallery, () => current);
   assert.equal(gallery.children.length, 0);
+});
+
+test('Listenvorschauen warten auf Darstellung und Sichtbarkeit und ignorieren veraltete Ansichten', async (t) => {
+  saveConnection({ inventoryId: '11111111-1111-4111-8111-111111111111', deviceId: 'test', deviceToken: 'test' });
+  const oldFrame = globalThis.requestAnimationFrame;
+  const oldObserver = globalThis.IntersectionObserver;
+  let frame;
+  let observed = [];
+  let onIntersection;
+  globalThis.requestAnimationFrame = (callback) => { frame = callback; return 1; };
+  globalThis.IntersectionObserver = class {
+    constructor(callback) { onIntersection = callback; }
+    observe(node) { observed.push(node); }
+    unobserve() {}
+    disconnect() {}
+  };
+  t.after(() => {
+    if (oldFrame) globalThis.requestAnimationFrame = oldFrame;
+    else delete globalThis.requestAnimationFrame;
+    if (oldObserver) globalThis.IntersectionObserver = oldObserver;
+    else delete globalThis.IntersectionObserver;
+    clearConnection();
+  });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => { calls++; throw new Error('Bildserver nicht erreichbar'); });
+  const preview = { textContent: 'Platzhalter' };
+  let current = true;
+  scheduleStockPreviews([{ item: { id: 'deferred' }, preview }], () => current);
+  assert.equal(calls, 0);
+  frame();
+  assert.equal(calls, 0);
+  assert.equal(observed.length, 0);
+  t.mock.timers.tick(0);
+  assert.deepEqual(observed, [preview]);
+  onIntersection([{ target: preview, isIntersecting: false }]);
+  assert.equal(calls, 0);
+  onIntersection([{ target: preview, isIntersecting: true }]);
+  assert.equal(calls, 1);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.match(preview.textContent, /Bildserver nicht erreichbar/);
+  observed = [];
+  scheduleStockPreviews([{ item: { id: 'stale' }, preview }], () => current);
+  current = false;
+  frame();
+  t.mock.timers.tick(0);
+  assert.equal(calls, 1);
+  assert.equal(observed.length, 0);
 });
 
 test('Bestandsvorschau zeigt nur das erste Bild, teilt Anfragen und meldet Ladefehler', async (t) => {

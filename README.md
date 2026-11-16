@@ -489,6 +489,16 @@ Bestandsansicht sind ohnehin nur eingelagerte Positionen sichtbar.
 Während des Seitenstarts und beim Nachladen erscheint **Produkte werden abgerufen**.
 Der Hinweis verschwindet nach Abschluss; Fehler und Hinweise zur Offline-Kopie
 werden separat angezeigt.
+Nach der Geräteberechtigungsprüfung werden die Listendaten geladen, ohne auf
+Inventarnamen oder Geräteaktivitätsmeldung zu warten. Diese Zusatzanfragen
+laufen parallel; Fehler werden im Statusbereich gemeldet.
+Die Karten erscheinen zunächst mit Textdaten und Bildplatzhaltern.
+Bildmetadaten und signierte URLs werden erst nach der ersten Darstellung
+angefordert. Vorschaubilder werden beim Sichtbarwerden der jeweiligen Karte
+nachgeladen, beim Scrollen folgen weitere. Die kompakte Produktliste lädt
+keine Vorschaubilder. Browser ohne IntersectionObserver laden nach der
+ersten Darstellung alle Listenvorschauen; Bilder selbst verwenden Lazy Loading.
+Wie schnell die Daten erscheinen, hängt weiterhin von Netzwerk und Supabase ab.
 
 ### QR und PWA / Offline
 

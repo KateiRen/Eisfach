@@ -62,5 +62,4 @@ export async function checkConnection() {
     error.revoked = true;
     throw error;
   }
-  await rpc('touch_device');
 }

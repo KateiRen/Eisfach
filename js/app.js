@@ -1,5 +1,5 @@
 import { loadConnection, clearConnection } from './auth.js';
-import { checkConnection, rest } from './supabase.js';
+import { checkConnection, rest, rpc } from './supabase.js';
 import { loadAppearance, applyAppearance, initAppearance } from './appearance.js';
 
 export function status(message) {
@@ -99,8 +99,16 @@ async function init() {
   if (navigator.onLine) {
     try {
       await checkConnection();
-      const inventories = await rest('inventories', '?select=name');
-      document.querySelector('#inventory-name').textContent = inventories[0]?.name || 'Dein Inventar';
+      const supplementary = Promise.all([
+        rpc('touch_device'), rest('inventories', '?select=name'),
+      ]).then(([, inventories]) => {
+        document.querySelector('#inventory-name').textContent = inventories[0]?.name || 'Dein Inventar';
+      });
+      if (page === 'inventory') {
+        supplementary.catch((error) => status(`Zusätzliche Inventarinformationen konnten nicht geladen werden: ${error.message}`));
+      } else {
+        await supplementary;
+      }
     } catch (error) {
       if (error.revoked) {
         clearConnection();
