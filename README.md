@@ -29,6 +29,10 @@ Datenbank, Geräteprüfung, private Bilder und serverseitige Funktionen.
   beim Speichern als Nein gespeichert.
 - Produktnummern sind Text: Führende Nullen bleiben erhalten; gleiche Nummern
   bei mehreren Produkten sind erlaubt.
+- Im Produktdialog öffnet **Suche bei bofrost** für rein numerische Produktnummern
+  mit 3 bis 6 Stellen die bofrost-Suche. Bei 8 oder 13 Stellen öffnet
+  **Suche nach EAN** die öffentliche Produktabfrage bei Open Food Facts.
+  Beide öffnen einen neuen Tab; andere Produktnummern zeigen keinen Suchbutton.
 - Das Gewicht beschreibt **eine Packung**, nicht das Gesamtgewicht einer Position.
   Zeiten werden in Minuten gespeichert; unbekannte Werte sind leer, 0 ist zulässig.
   Die **Auftauzeit** wird bis einschließlich 60 Minuten als Minutenwert angezeigt,

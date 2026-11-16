@@ -4,7 +4,7 @@ import { uploadImage, imageURL, removeImage } from './storage.js';
 import { element, action, status } from './app.js';
 import { locationLabel, populateCompartments, locationSelection } from './locations.js';
 import { loadSorting, compareOrder, orderRecords, orderStockPositions } from './ordering.js';
-import { productDetails, thawingTimeLabel, optionalInteger, optionalWeight } from './product.js';
+import { productDetails, productNumberSearch, thawingTimeLabel, optionalInteger, optionalWeight } from './product.js';
 
 export { optionalInteger, optionalWeight } from './product.js';
 
@@ -383,6 +383,20 @@ function setView(view) {
   render();
 }
 
+function updateProductNumberSearch() {
+  const search = productNumberSearch(form().elements.product_number.value);
+  const container = document.querySelector('#item-number-search');
+  const link = container.querySelector('a');
+  container.hidden = !search;
+  if (search) {
+    link.textContent = search.label;
+    link.href = search.href;
+  } else {
+    link.textContent = '';
+    link.removeAttribute('href');
+  }
+}
+
 async function editItem(item) {
   const version = ++editorImageVersion;
   editingItem = item || null;
@@ -391,6 +405,7 @@ async function editItem(item) {
   for (const key of ['id', 'name', 'product_number', 'weight_grams', 'description', 'category', 'notes', 'preparation_minutes', 'thawing_minutes']) {
     form().elements[key].value = item?.[key] ?? '';
   }
+  updateProductNumberSearch();
   const details = productDetails(item || {});
   form().elements.product_url.value = details.product_url ?? '';
   form().elements.parts.value = details.parts ?? '';
@@ -810,6 +825,7 @@ export async function initInventory() {
     try {
       await editItem();
       form().elements.product_number.value = stockForm().elements.product_number_search.value.trim();
+      updateProductNumberSearch();
     } catch (error) {
       document.querySelector('#stock-status').textContent = error.message;
     }
@@ -849,6 +865,7 @@ export async function initInventory() {
     if (stockBusy) event.preventDefault();
   });
   form().addEventListener('submit', saveItem);
+  form().elements.product_number.addEventListener('input', updateProductNumberSearch);
   stockForm().addEventListener('submit', saveStock);
   stockForm().elements.location_id.addEventListener('change', () => {
     populateCompartments(stockForm().elements.compartment_id, compartments,
