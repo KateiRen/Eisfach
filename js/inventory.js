@@ -213,8 +213,11 @@ function render() {
         card.append(row);
         return card;
       }
+      card.classList.add('stock-card');
+      const preview = element('div', undefined, 'stock-preview');
+      const info = element('div', undefined, 'stock-info');
       const pack = productPackInfo(item);
-      card.append(element('h3', item.name),
+      info.append(element('h3', item.name),
         element('p', `Produktnummer: ${item.product_number || '—'}`, 'muted'),
         element('p', `Teile: ${pack.parts} · Gewicht: ${pack.weight}`, 'muted'),
         element('p', productStockLabel(item.id, stockEntries)));
@@ -223,7 +226,9 @@ function render() {
       const add = action('Einlagern', () => editStock(null, item.id));
       edit.disabled = add.disabled = offline;
       buttons.append(edit, add);
-      card.append(buttons);
+      info.append(buttons);
+      card.append(preview, info);
+      loadStockPreview(item, preview, () => version === renderVersion);
       return card;
     }
     card.classList.add('stock-card');

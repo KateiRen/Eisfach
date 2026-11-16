@@ -318,6 +318,11 @@ Die SQL- und Edge-Quelldateien dürfen öffentlich sein, enthalten aber keine Se
    das Gewicht aus dem Produktfeld in Gramm; fehlende Werte erscheinen als „—“.
    Der Schalter **Kompakte Ansicht** zeigt Produkte stattdessen jeweils in einer
    Zeile mit Name sowie den Textaktionen **Bearbeiten** und **Einlagern**.
+   Die nicht kompakte Ansicht zeigt zusätzlich das erste Produktbild als
+   96-Pixel-Vorschau wie im Bestand. Die kompakte Ansicht bleibt ohne Bilder.
+   Die Vorschau lädt das vorhandene WebP-Bild verzögert (Lazy Loading);
+   separate Miniaturdateien werden bislang nicht erzeugt. Beim Upload wird
+   lediglich auf maximal 1600 Pixel Kantenlänge verkleinert und komprimiert.
    Vorhandene Produktbilder stehen im Bearbeitungsdialog direkt über
    **Bilder hinzufügen** und können dort gelöscht werden.
    Neben der Dateiauswahl kann unter **Bild-URL** eine direkte HTTP-/HTTPS-Bildadresse
