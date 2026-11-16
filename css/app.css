@@ -67,6 +67,11 @@ input[type="color"] { width: 100%; max-width: 12rem; height: 3rem; padding: .25r
 .stock-info p { margin: .25rem 0; }
 .stock-name { background: none; color: var(--accent-link); padding: 0; text-align: left; overflow-wrap: anywhere; }
 .stock-name:hover { text-decoration: underline; }
+.stock-detail-image { width: min(100%, 192px); min-height: 192px; color: #49666c; }
+.stock-detail-image img { display: block; width: 100%; height: 192px; object-fit: contain; border-radius: .6rem; }
+#stock-subtitle { font-size: .875rem; }
+.stock-description { white-space: pre-wrap; overflow-wrap: anywhere; }
+#stock-position-actions { margin-bottom: 1rem; }
 #sorting-controls { border: 0; padding: 0; margin: 0; min-width: 0; }
 .sorting-list { padding-left: 1.5rem; }
 .sorting-row { padding: .4rem 0; overflow-wrap: anywhere; }
@@ -77,7 +82,7 @@ input[type="color"] { width: 100%; max-width: 12rem; height: 3rem; padding: .25r
 .quantity-control { display: flex; align-items: center; gap: .5rem; margin-bottom: 1rem; }
 .quantity-control input { min-width: 0; margin: 0; }
 .quantity-control button { flex-shrink: 0; min-width: 44px; }
-.notice, #status:not(:empty), #editor-status:not(:empty), #stock-status:not(:empty) { padding: .8rem; background: #fff1d2; border-radius: .5rem; }
+.notice, #status:not(:empty), #editor-status:not(:empty), #stock-status:not(:empty), #stock-action-status:not(:empty) { padding: .8rem; background: #fff1d2; border-radius: .5rem; }
 dialog { max-width: min(94vw, 600px); width: 100%; max-height: 90dvh; border: 1px solid #8aafb2; border-radius: 1rem; padding: 1.25rem; }
 dialog::backdrop { background: #102f38a8; }
 .images { display: flex; flex-wrap: wrap; gap: .75rem; }

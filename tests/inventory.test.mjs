@@ -5,7 +5,7 @@ globalThis.document = { querySelector: () => null };
 const {
   hasStock, matchesProduct, optionalInteger, optionalWeight, stockValues, groupCatalog, productPackInfo,
   productWeightLabel, filterByProductNumber,
-  productStockLabel, productSearchURL, loadProductImages, loadStockPreview,
+  productStockLabel, productSearchURL, loadProductImages, loadStockPreview, createAdditionalPosition,
 } = await import('../js/inventory.js');
 const { loadImageURL, uploadImage } = await import('../js/storage.js');
 const { saveConnection, clearConnection, saveSnapshot, loadSnapshot } = await import('../js/auth.js');
@@ -367,6 +367,7 @@ test('Bestandsvorschau zeigt nur das erste Bild, teilt Anfragen und meldet Ladef
     replaceChildren(...children) { this.children = children; },
     addEventListener() {},
   });
+
   globalThis.document = { querySelector: () => null, createElement: node };
   t.after(() => { globalThis.document = previousDocument; clearConnection(); });
   let metadataCalls = 0;
@@ -410,6 +411,32 @@ test('Bestandsvorschau zeigt nur das erste Bild, teilt Anfragen und meldet Ladef
   stale.textContent = 'Neuer Inhalt';
   await loadStockPreview({ id: 'fish' }, stale, () => false);
   assert.equal(stale.textContent, 'Neuer Inhalt');
+});
+
+test('Zusätzliche Position verwendet feste ID und bestätigt einen gespeicherten Retry ohne Duplikate', async (t) => {
+  saveConnection({ inventoryId: '11111111-1111-4111-8111-111111111111', deviceId: 'test', deviceToken: 'test' });
+  t.after(clearConnection);
+  const body = {
+    id: '22222222-2222-4222-8222-222222222222', inventory_id: '11111111-1111-4111-8111-111111111111',
+    item_id: 'fish', location_id: 'cellar', compartment_id: null, quantity: 3,
+  };
+  let saved = null;
+  let posts = 0;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (options.method === 'GET') {
+      assert.equal(new URL(url).searchParams.get('id'), `eq.${body.id}`);
+      return Response.json(saved ? [saved] : []);
+    }
+    posts++;
+    saved = { ...JSON.parse(options.body), updated_at: '2026-11-16T10:00:00Z' };
+    assert.deepEqual(saved, { ...body, updated_at: '2026-11-16T10:00:00Z' });
+    throw new Error('Antwort verloren');
+  });
+  await assert.rejects(createAdditionalPosition(body), /Antwort verloren/);
+  assert.deepEqual(await createAdditionalPosition(body), saved);
+  assert.equal(posts, 1);
+  await assert.rejects(createAdditionalPosition({ ...body, quantity: 4 }), /bereits mit anderen Werten gespeichert/);
+  assert.equal(posts, 1);
 });
 
 test('Stückzahl, Produktgewicht und Zeiten beachten Grenzen und optionale Werte', () => {

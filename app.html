@@ -56,30 +56,67 @@
         </div>
       </form>
     </dialog>
-    <dialog id="stock-dialog">
+    <dialog id="stock-dialog" aria-labelledby="stock-title">
       <form id="stock-form">
         <h2 id="stock-title">Bestand hinzufügen</h2>
         <input name="id" type="hidden">
-        <label>Produktnummer<input name="product_number_search" type="search" maxlength="100" placeholder="Produkte nach Nummer filtern"></label>
-        <label>Produkt<select name="item_id" required></select></label>
-        <p id="stock-product-weight"></p>
-        <button id="stock-new-item" type="button" class="secondary">Neues Produkt anlegen</button>
-        <div class="columns">
-          <label>Ort<select name="location_id" required></select></label>
-          <label>Fach (optional)<select name="compartment_id"><option value="">Ohne Fach</option></select></label>
+        <div id="stock-product-picker">
+          <label>Produktnummer<input name="product_number_search" type="search" maxlength="100" placeholder="Produkte nach Nummer filtern"></label>
+          <label>Produkt<select name="item_id" required></select></label>
+          <button id="stock-new-item" type="button" class="secondary">Neues Produkt anlegen</button>
         </div>
-        <p>Orte und Fächer unter <a href="./freezer.html">Einstellungen → Orte und Fächer</a> verwalten.</p>
-        <label for="stock-quantity">Stückzahl</label>
+        <div id="stock-product-details" hidden>
+          <p id="stock-subtitle" class="muted"></p>
+          <div id="stock-detail-image" class="stock-detail-image"></div>
+          <p id="stock-description" class="stock-description"></p>
+          <p id="stock-preparation"></p>
+          <p id="stock-thawing"></p>
+        </div>
+        <p id="stock-product-weight"></p>
+        <div id="stock-location-picker">
+          <div class="columns">
+            <label>Ort<select name="location_id" required></select></label>
+            <label>Fach (optional)<select name="compartment_id"><option value="">Ohne Fach</option></select></label>
+          </div>
+          <p>Orte und Fächer unter <a href="./freezer.html">Einstellungen → Orte und Fächer</a> verwalten.</p>
+        </div>
+        <p id="stock-current-location" hidden></p>
+        <label id="stock-quantity-label" for="stock-quantity">Stückzahl</label>
         <div class="quantity-control">
           <button id="quantity-down" type="button" class="secondary" aria-label="Stückzahl verringern">-</button>
           <input id="stock-quantity" name="quantity" type="number" min="0" max="2147483647" step="1" required value="1">
           <button id="quantity-up" type="button" class="secondary" aria-label="Stückzahl erhöhen">+</button>
         </div>
         <p id="stock-status" role="status"></p>
+        <div id="stock-position-actions" class="actions" hidden>
+          <button id="relocate-stock" type="button" class="secondary">Umlagern</button>
+          <button id="additional-stock" type="button" class="secondary">Weiteren Bestand erfassen</button>
+        </div>
         <div class="actions">
           <button id="delete-stock" type="button" class="danger" hidden>Position entfernen</button>
           <button type="submit">Speichern</button>
           <button id="cancel-stock" type="button" class="secondary">Schließen</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="stock-action-dialog" aria-labelledby="stock-action-title">
+      <form id="stock-action-form">
+        <h2 id="stock-action-title"></h2>
+        <p id="stock-action-info"></p>
+        <div id="stock-action-quantity-control">
+          <label for="stock-action-quantity">Zusätzliche Stückzahl</label>
+          <div class="quantity-control">
+            <button id="stock-action-down" type="button" class="secondary" aria-label="Zusätzliche Stückzahl verringern">-</button>
+            <input id="stock-action-quantity" name="quantity" type="number" min="1" max="2147483647" step="1" required value="1">
+            <button id="stock-action-up" type="button" class="secondary" aria-label="Zusätzliche Stückzahl erhöhen">+</button>
+          </div>
+        </div>
+        <label>Ort<select name="location_id" required></select></label>
+        <label>Fach (optional)<select name="compartment_id"><option value="">Ohne Fach</option></select></label>
+        <p id="stock-action-status" role="status"></p>
+        <div class="actions">
+          <button type="submit">Speichern</button>
+          <button id="cancel-stock-action" type="button" class="secondary">Abbrechen</button>
         </div>
       </form>
     </dialog>

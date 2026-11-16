@@ -379,7 +379,25 @@ Die SQL- und Edge-Quelldateien dürfen öffentlich sein, enthalten aber keine Se
    Die Vorbereitungszeit entspricht ausschließlich der gespeicherten Auftauzeit;
    ist sie unbekannt, bleibt die Angabe leer. Stückzahlen und weitere Angaben
    stehen im Positionsdialog, den ein Klick auf den Namen öffnet. Dort lässt sich
-   die Position auch entfernen. Ohne Foto oder bei Bildladefehlern erscheint ein
+   die Position auch entfernen. Beim Bearbeiten zeigt der Dialog den Produktnamen
+   als Überschrift, die Produktnummer als Untertitel, das erste Bild in einer
+   192-Pixel-Vorschau sowie Beschreibung, Zubereitungszeit, Vorbereitungszeit und
+   Packungsgewicht. Die Stückzahl dieser Position bleibt mit Minus/Plus bearbeitbar.
+   **Speichern** übernimmt nur deren Mengenänderung, **Schließen** verwirft
+   ungespeicherte Eingaben.
+
+   **Umlagern** fragt in einem separaten Dialog nach Zielort und optionalem Fach.
+   Die gesamte gespeicherte Position wird nach Bestätigung sofort verschoben;
+   ihre Stückzahl bleibt unverändert. **Weiteren Bestand erfassen** fragt nach
+   einer zusätzlichen positiven Stückzahl sowie Ort/Fach und speichert sofort
+   eine neue Position für dasselbe Produkt. Diese Aktionen verändern eine noch
+   ungespeicherte Stückzahl im Hauptdialog nicht. Ein späteres **Schließen**
+   macht bereits bestätigte Aktionen nicht rückgängig. **Abbrechen** im
+   jeweiligen Aktionsdialog verändert keine Daten. Beide Aktionen benötigen
+   Internet; veraltete Positionen werden beim Umlagern nicht überschrieben.
+   Wiederholungen einer fehlgeschlagenen zusätzlichen Erfassung verwenden
+   dieselbe Positions-ID, um bei verlorenen Antworten Duplikate zu vermeiden.
+   Ohne Foto oder bei Bildladefehlern erscheint ein
    Hinweis statt eines Bildes. Private Vorschaubilder sind nur online verfügbar;
    signierte URLs werden ausschließlich kurzzeitig im Arbeitsspeicher gehalten.
    Beim Entfernen einer Position bleibt das Produkt erhalten;

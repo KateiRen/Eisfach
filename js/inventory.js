@@ -23,10 +23,14 @@ let editorImageVersion = 0;
 let stockEditingVersion = null;
 let stockEditingEntry = null;
 let stockBusy = false;
+let stockImageVersion = 0;
+let stockAction = null;
 const form = () => document.querySelector('#item-form');
 const dialog = () => document.querySelector('#item-dialog');
 const stockForm = () => document.querySelector('#stock-form');
 const stockDialog = () => document.querySelector('#stock-dialog');
+const stockActionForm = () => document.querySelector('#stock-action-form');
+const stockActionDialog = () => document.querySelector('#stock-action-dialog');
 
 export function hasStock(entry) {
   return Number(entry.quantity) > 0;
@@ -295,7 +299,7 @@ async function stockPreviewURL(itemId) {
   }
 }
 
-export async function loadStockPreview(item, preview, isCurrent) {
+export async function loadStockPreview(item, preview, isCurrent, size = 96) {
   if (!isCurrent()) return;
   preview.textContent = offline ? 'Bild nur online verfügbar' : 'Bild wird geladen …';
   if (offline) return;
@@ -310,7 +314,7 @@ export async function loadStockPreview(item, preview, isCurrent) {
     img.src = url;
     img.alt = item.name;
     img.loading = 'lazy';
-    img.width = img.height = 96;
+    img.width = img.height = size;
     img.addEventListener('error', () => {
       if (isCurrent()) preview.textContent = 'Bild konnte nicht geladen werden.';
     });
@@ -484,6 +488,7 @@ function editStock(entry, itemId) {
     ? '' : 'Bitte zuerst unter Einstellungen → Orte und Fächer einen Ort anlegen.';
   updateStockActions();
   stockDialog().showModal();
+  updateStockProduct();
 }
 
 function populateStockProducts(preferredId = stockForm().elements.item_id.value) {
@@ -498,8 +503,36 @@ function populateStockProducts(preferredId = stockForm().elements.item_id.value)
 
 function updateStockProduct() {
   const product = items.find((item) => item.id === stockForm().elements.item_id.value);
+  const editing = Boolean(stockEditingEntry);
+  document.querySelector('#stock-product-picker').hidden = editing;
+  document.querySelector('#stock-product-details').hidden = !editing;
+  document.querySelector('#stock-location-picker').hidden = editing;
+  document.querySelector('#stock-current-location').hidden = !editing;
+  document.querySelector('#stock-position-actions').hidden = !editing;
+  document.querySelector('#stock-quantity-label').textContent = editing ? 'Stückzahl dieser Position' : 'Stückzahl';
+  document.querySelector('#stock-title').textContent = editing ? product?.name || 'Produkt nicht verfügbar' : 'Bestand hinzufügen';
+  if (editing) {
+    document.querySelector('#stock-subtitle').textContent = `Produktnummer: ${product?.product_number || '—'}`;
+    document.querySelector('#stock-description').textContent = product?.description || 'Keine Beschreibung vorhanden.';
+    document.querySelector('#stock-preparation').textContent =
+      `Zubereitungszeit: ${product?.preparation_minutes != null ? `${product.preparation_minutes} Min.` : '—'}`;
+    document.querySelector('#stock-thawing').textContent =
+      `Vorbereitungszeit: ${product?.thawing_minutes != null ? `${product.thawing_minutes} Min.` : '—'}`;
+    updateStockLocation();
+    const version = ++stockImageVersion;
+    const preview = document.querySelector('#stock-detail-image');
+    preview.replaceChildren();
+    if (product && stockDialog().open) {
+      loadStockPreview(product, preview, () => version === stockImageVersion && stockDialog().open, 192);
+    }
+  }
   document.querySelector('#stock-product-weight').textContent = `Gewicht pro Packung: ${productWeightLabel(product)}`;
   updateStockActions();
+}
+
+function updateStockLocation() {
+  document.querySelector('#stock-current-location').textContent =
+    `Aktueller Ort: ${locationLabel(stockEditingEntry, locations, compartments) || 'Nicht verfügbar'}`;
 }
 
 function updateStockActions() {
@@ -512,6 +545,100 @@ function updateStockActions() {
   const remove = document.querySelector('#delete-stock');
   remove.hidden = !stockEditingEntry;
   remove.disabled = stockBusy || offline;
+  for (const id of ['relocate-stock', 'additional-stock']) {
+    document.querySelector(`#${id}`).disabled = stockBusy || offline || !stockEditingEntry;
+  }
+  stockForm().elements.quantity.readOnly = stockBusy || offline;
+  stockActionForm().querySelector('[type=submit]').disabled = stockBusy || offline;
+  document.querySelector('#cancel-stock-action').disabled = stockBusy;
+  const additionalQuantity = Number(stockActionForm().elements.quantity.value);
+  document.querySelector('#stock-action-down').disabled = stockBusy || offline || additionalQuantity <= 1;
+  document.querySelector('#stock-action-up').disabled = stockBusy || offline || additionalQuantity >= 2147483647;
+  stockActionForm().elements.quantity.readOnly = stockBusy || offline;
+}
+
+function openStockAction(mode) {
+  if (offline || stockBusy || !stockEditingEntry) throw new Error('Diese Aktion benötigt eine verfügbare Bestandsposition und Internet.');
+  stockAction = { mode, id: crypto.randomUUID() };
+  stockActionForm().reset();
+  const moving = mode === 'move';
+  document.querySelector('#stock-action-title').textContent = moving ? 'Umlagern' : 'Weiteren Bestand erfassen';
+  document.querySelector('#stock-action-info').textContent = moving
+    ? `Die gesamte gespeicherte Position (${stockEditingEntry.quantity} Stück) wird umgelagert. Eine ungespeicherte Mengenänderung bleibt im Hauptdialog erhalten.`
+    : 'Erfasst eine neue Position für dasselbe Produkt. Die aktuelle Position bleibt unverändert.';
+  document.querySelector('#stock-action-quantity-control').hidden = moving;
+  stockActionForm().elements.quantity.disabled = moving;
+  stockActionForm().elements.location_id.replaceChildren(new Option('Bitte Ort auswählen', ''),
+    ...locations.map((location) => new Option(location.name, location.id)));
+  stockActionForm().elements.location_id.value = stockEditingEntry.location_id;
+  populateCompartments(stockActionForm().elements.compartment_id, compartments,
+    stockEditingEntry.location_id, stockEditingEntry.compartment_id ?? '');
+  document.querySelector('#stock-action-status').textContent = '';
+  updateStockActions();
+  stockActionDialog().showModal();
+}
+
+export async function createAdditionalPosition(body) {
+  // A stable ID allows retry after the server saved a position but its response was lost.
+  const existing = await rest('stock_entries', `?id=eq.${body.id}&select=*`);
+  if (existing.length) {
+    if (['item_id', 'location_id', 'compartment_id', 'quantity'].some((field) => existing[0][field] !== body[field])) {
+      throw new Error('Diese zusätzliche Position wurde bereits mit anderen Werten gespeichert. Bitte schließen und die Liste prüfen.');
+    }
+    return existing[0];
+  }
+  const saved = await rest('stock_entries', '', {
+    method: 'POST', body, headers: { Prefer: 'return=representation' },
+  });
+  if (!saved?.length) throw new Error('Die zusätzliche Position konnte nicht bestätigt werden. Bitte erneut versuchen.');
+  return saved[0];
+}
+
+async function saveStockAction(event) {
+  event.preventDefault();
+  if (stockBusy) return;
+  const fields = Object.fromEntries(new FormData(stockActionForm()));
+  stockBusy = true;
+  updateStockActions();
+  const feedback = document.querySelector('#stock-action-status');
+  feedback.textContent = 'Wird gespeichert …';
+  let savedSuccessfully = false;
+  try {
+    if (offline) throw new Error('Offline sind keine Änderungen möglich.');
+    const target = locationSelection(fields, locations, compartments);
+    if (stockAction.mode === 'move') {
+      const saved = await rest('stock_entries',
+        `?id=eq.${stockEditingEntry.id}&updated_at=eq.${encodeURIComponent(stockEditingVersion)}`, {
+          method: 'PATCH', body: target, headers: { Prefer: 'return=representation' },
+        });
+      if (!saved?.length) throw new Error('Position wurde zwischenzeitlich geändert oder entfernt. Bitte schließen und erneut öffnen.');
+      stockEditingEntry = saved[0];
+      stockEditingVersion = saved[0].updated_at;
+      stockForm().elements.location_id.value = saved[0].location_id;
+      populateCompartments(stockForm().elements.compartment_id, compartments,
+        saved[0].location_id, saved[0].compartment_id ?? '');
+      updateStockLocation();
+    } else {
+      const values = stockValues(fields);
+      if (values.quantity < 1) throw new Error('Bitte mindestens ein Stück erfassen.');
+      await createAdditionalPosition({
+        id: stockAction.id, inventory_id: loadConnection().inventoryId,
+        item_id: stockEditingEntry.item_id, ...target, ...values,
+      });
+    }
+    savedSuccessfully = true;
+    stockActionDialog().close();
+    document.querySelector('#stock-status').textContent = stockAction.mode === 'move'
+      ? 'Position umgelagert. Ungespeicherte Stückzahländerungen bitte mit Speichern übernehmen.'
+      : 'Zusätzliche Bestandsposition gespeichert.';
+    await refresh();
+  } catch (error) {
+    if (savedSuccessfully) document.querySelector('#stock-status').textContent = `Gespeichert, aber die Liste konnte nicht aktualisiert werden: ${error.message}`;
+    else feedback.textContent = error.message;
+  } finally {
+    stockBusy = false;
+    updateStockActions();
+  }
 }
 
 async function saveStock(event) {
@@ -524,9 +651,9 @@ async function saveStock(event) {
     if (offline) throw new Error('Offline sind keine Änderungen möglich.');
     const fields = Object.fromEntries(new FormData(stockForm()));
     if (!items.some((item) => item.id === fields.item_id)) throw new Error('Bitte ein Produkt auswählen.');
-    const body = { item_id: fields.item_id,
-      ...locationSelection(fields, locations, compartments), ...stockValues(fields) };
     const creating = !fields.id;
+    const body = creating ? { item_id: fields.item_id,
+      ...locationSelection(fields, locations, compartments), ...stockValues(fields) } : stockValues(fields);
     if (creating) body.inventory_id = loadConnection().inventoryId;
     const filter = creating ? '' : `?id=eq.${encodeURIComponent(fields.id)}&updated_at=eq.${encodeURIComponent(stockEditingVersion)}`;
     const saved = await rest('stock_entries', filter, {
@@ -539,7 +666,8 @@ async function saveStock(event) {
     stockDialog().close();
     await refresh();
   } catch (error) {
-    feedback.textContent = error.message;
+    if (stockDialog().open) feedback.textContent = error.message;
+    else status(`Gespeichert, aber die Liste konnte nicht aktualisiert werden: ${error.message}`);
   } finally {
     stockBusy = false;
     updateStockActions();
@@ -621,12 +749,31 @@ export async function initInventory() {
   stockForm().elements.product_number_search.addEventListener('input', () => populateStockProducts());
   stockForm().elements.item_id.addEventListener('change', updateStockProduct);
   stockForm().elements.quantity.addEventListener('input', updateStockActions);
+  stockActionForm().elements.quantity.addEventListener('input', updateStockActions);
   for (const [id, step] of [['quantity-down', -1], ['quantity-up', 1]]) {
     document.querySelector(`#${id}`).addEventListener('click', () => {
       stockForm().elements.quantity.stepUp(step);
       updateStockActions();
     });
   }
+  for (const [id, step] of [['stock-action-down', -1], ['stock-action-up', 1]]) {
+    document.querySelector(`#${id}`).addEventListener('click', () => {
+      stockActionForm().elements.quantity.stepUp(step);
+      updateStockActions();
+    });
+  }
+  for (const [id, mode] of [['relocate-stock', 'move'], ['additional-stock', 'add']]) {
+    document.querySelector(`#${id}`).addEventListener('click', () => {
+      try { openStockAction(mode); }
+      catch (error) { document.querySelector('#stock-status').textContent = error.message; }
+    });
+  }
+  document.querySelector('#cancel-stock-action').addEventListener('click', () => stockActionDialog().close());
+  stockActionForm().addEventListener('submit', saveStockAction);
+  stockActionForm().elements.location_id.addEventListener('change', () => {
+    populateCompartments(stockActionForm().elements.compartment_id, compartments,
+      stockActionForm().elements.location_id.value);
+  });
   document.querySelector('#stock-new-item').addEventListener('click', async () => {
     try {
       await editItem();
@@ -660,6 +807,13 @@ export async function initInventory() {
     document.querySelector('#editor-images').replaceChildren();
   });
   stockDialog().addEventListener('cancel', (event) => {
+    if (stockBusy) event.preventDefault();
+  });
+  stockDialog().addEventListener('close', () => {
+    stockImageVersion++;
+    document.querySelector('#stock-detail-image').replaceChildren();
+  });
+  stockActionDialog().addEventListener('cancel', (event) => {
     if (stockBusy) event.preventDefault();
   });
   form().addEventListener('submit', saveItem);
