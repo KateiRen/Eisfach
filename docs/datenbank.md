@@ -5,7 +5,7 @@
 Verbindliche Definition ist [supabase/schema.sql](../supabase/schema.sql).
 Sie initialisiert eine frische Supabase-Datenbank in einer Transaktion und ist
 nicht zum erneuten Ausführen auf bestehenden Tabellen vorgesehen.
-Die folgenden zwölf Tabellen liegen im Schema `public`; zusätzlich wird ein
+Die folgenden dreizehn Tabellen liegen im Schema `public`; zusätzlich wird ein
 privater Supabase-Storage-Bucket verwendet.
 
 ## Konventionen
@@ -43,6 +43,7 @@ inventories
               └── stock_entries  optionales Fach derselben Position
 
 registration_rate_limits            intern, keine FK-Beziehung
+inventory_invitations               Betreiber-Einladungen, keine Inventar-FK
 ```
 
 Zusammengesetzte Fremdschlüssel stellen sicher, dass Position, Produkt, Ort
@@ -92,6 +93,7 @@ die Edge Function und privilegierte SQL-Funktion.
 | --- | --- | --- | --- | --- |
 | `id` | uuid | nein | `gen_random_uuid()` | PK des Codes |
 | `inventory_id` | uuid | nein | keiner | FK auf `inventories.id`, `ON DELETE CASCADE` |
+| `issued_by_device_id` | text | nur gesperrte Altcodes | keiner | Ausstellendes Gerät; FK auf `device_registrations.device_id`, `ON DELETE CASCADE` |
 | `token_hash` | bytea | nein | keiner | Global eindeutiger SHA-256-Hash; exakt 32 Bytes |
 | `expires_at` | timestamptz | nein | keiner | Ablaufzeitpunkt |
 | `max_uses` | integer | nein | `1` | Maximale Registrierungen, größer als 0 |
@@ -99,12 +101,17 @@ die Edge Function und privilegierte SQL-Funktion.
 | `revoked` | boolean | nein | `false` | Gesperrt oder vollständig verbraucht |
 | `created_at` | timestamptz | nein | `now()` | Erzeugungszeitpunkt |
 
-Zusätzlicher Index auf `inventory_id`. Kein direkter Browserzugriff.
+Zusätzliche Indizes auf `inventory_id` und `issued_by_device_id`. Kein direkter Browserzugriff.
 `issue_join_token()` erzeugt zwölf zufällige Zeichen aus
 `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, formatiert als `XXXX-XXXX-XXXX`,
 setzt 15 Minuten Laufzeit und eine Verwendung. `register_device()` prüft und
 verbraucht den Code atomar unter Zeilensperre; beim letzten Verbrauch wird
 `revoked = true`. Abgelaufene Codes werden dadurch nicht automatisch gelöscht.
+Ein ungesperrter Code muss einen Aussteller besitzen. Registrierung sperrt
+zuerst das aktive Ausstellergerät und dann den Code, damit ein abgeschlossener
+Gerätewiderruf nicht mit einer noch laufenden Registrierung umgangen wird.
+Deaktivieren sperrt dessen offene Codes per Trigger, Löschen entfernt sie
+über den Fremdschlüssel. Bereits registrierte Geräte behalten ihre Berechtigung.
 
 ## 4. `items` – Produktdefinitionen
 
@@ -301,22 +308,42 @@ Audit-Trigger; Umlagerungen erzeugen jedoch Stock-Update-Ereignisse.
 
 | Feld | Typ | NULL | Default | Bedeutung / Prüfung |
 | --- | --- | --- | --- | --- |
-| `key` | text | nein | keiner | PK; `client:<hash>` oder `inventory:<uuid>` |
+| `key` | text | nein | keiner | PK; `create:<client-hash>` oder `register:<client-hash>` |
 | `window_start` | timestamptz | nein | keiner | Beginn des gezählten Minutenfensters |
 | `attempts` | integer | nein | keiner | Anzahl verbuchter Versuche |
 
 Kein direkter Browserzugriff und keine FK-Beziehung.
-`consume_registration_attempt()` zählt in einer eigenen Transaktion, damit
-ein ungültiger Join-Code den Verbrauch nicht zurückrollt.
-Die Implementierung begrenzt auf 30 Versuche je Client und 60 je Inventar
-pro Minute; nach Überschreiten des Clientlimits wird dessen Inventarzähler
-für diesen Versuch nicht weiter erhöht. Zähler werden intern bei 1000000
+`consume_public_attempt()` zählt in einer eigenen Transaktion, damit
+ein ungültiger Einladungscode den Verbrauch nicht zurückrollt.
+Die Implementierung begrenzt auf 5 Inventaranlageversuche bzw. 30
+Geräteregistrierungsversuche je Client und Minute. Es gibt keinen
+inventarweiten Zähler, den ein fremder Client zum Blockieren anderer
+Clients ausschöpfen könnte. Clients hinter derselben öffentlichen IP teilen
+sich das Limit. Zähler werden intern bei 1000000
 gedeckelt. Einträge älter als eine Stunde werden bei neuen Versuchen entfernt.
 Die konkreten Begrenzungen sind Funktionslogik, keine Feld-Constraints.
 
+## 12. `inventory_invitations` – Betreiber-Einladungen
+
+| Feld | Typ | NULL | Default | Bedeutung / Prüfung |
+| --- | --- | --- | --- | --- |
+| `id` | uuid | nein | `gen_random_uuid()` | PK; zum administrativen Widerruf durch Löschen |
+| `token_hash` | bytea | nein | keiner | Eindeutiger SHA-256-Hash; exakt 32 Bytes |
+| `expires_at` | timestamptz | nein | keiner | Ablaufzeitpunkt |
+| `used_at` | timestamptz | ja | keiner | Verbrauchszeitpunkt; `NULL` bedeutet unverbraucht |
+| `created_at` | timestamptz | nein | `now()` | Erzeugungszeitpunkt |
+
+Kein direkter Browserzugriff. `issue_inventory_invitation()` ist ausschließlich
+für Betreiber im SQL Editor bzw. `service_role` freigegeben. Es erzeugt
+32 Zufallsbytes als 64 Hex-Zeichen und eine Gültigkeit von 24 Stunden.
+`setup_inventory()` prüft und verbraucht eine Einladung unter Zeilensperre in
+derselben Transaktion wie Inventar- und Geräteanlage. Replay und abgelaufene
+Einladungen schlagen fehl; ein fehlgeschlagenes Insert verbraucht nichts.
+Es gibt keinen öffentlichen Endpunkt zum Ausstellen dieser Einladungen.
+
 ## Zugriffsrechte und RLS
 
-RLS ist auf allen zwölf Tabellen aktiviert.
+RLS ist auf allen dreizehn Tabellen aktiviert.
 Die Browserrollen `anon` und `authenticated` haben dieselben hier beschriebenen
 Geräterechte. Es werden keine Supabase-Auth-Benutzer benötigt.
 
@@ -327,7 +354,7 @@ Geräterechte. Es werden keine Supabase-Auth-Benutzer benötigt.
 | `items`, `stock_entries`, `order_entries`, `storage_locations`, `storage_compartments`, `item_images` | SELECT, INSERT, UPDATE, DELETE |
 | `inventory_sorting` | SELECT, INSERT, UPDATE; kein DELETE |
 | `audit_log` | SELECT |
-| `join_tokens`, `registration_rate_limits` | Keine direkten Rechte |
+| `join_tokens`, `registration_rate_limits`, `inventory_invitations` | Keine direkten Rechte |
 
 `service_role` hat vollständige Tabellenrechte und wird ausschließlich
 serverseitig verwendet. Standardmäßig wird EXECUTE für künftig erstellte
@@ -349,12 +376,14 @@ Registrierung und den SHA-256-Hash. Fehlerhafte/fehlende Zugangsdaten ergeben
 | `reorder_product(p_item_id uuid)` | Browserrollen; Bestelleintrag als SETOF | Inventargebundenes atomares Anlegen/Erhöhen der Bestellmenge; Invoker-Rechte und RLS |
 | `can_access_inventory_image(p_path text)` | Browserrollen/Policies; boolean | Inventar und Produktzuordnung eines Bildpfads prüfen |
 | `delete_storage_location(p_location_id uuid, p_compartment_id uuid, p_updated_at timestamptz, p_target_location_id uuid, p_target_compartment_id uuid)` | Browserrollen; integer | Ort oder Fach versionsgeprüft löschen; betroffene Positionen atomar verschieben, Anzahl zurückgeben |
-| `setup_inventory(p_name text, p_description text, p_device_name text)` | Nur service_role; Inventar-ID, Geräte-ID, Gerätegeheimnis | Inventar und erstes Gerät atomar anlegen |
+| `issue_inventory_invitation()` | Nur service_role; Einladungscode und Ablaufzeit | Betreiber-Einladung für ein Inventar erzeugen; auch im SQL Editor als postgres aufrufbar |
+| `setup_inventory(p_name text, p_description text, p_device_name text, p_invitation_token text)` | Nur service_role; Inventar-ID, Geräte-ID, Gerätegeheimnis | Betreiber-Einladung verbrauchen, Inventar und erstes Gerät atomar anlegen |
 | `register_device(p_inventory_id uuid, p_join_token text, p_device_name text)` | Nur service_role; Inventar-ID, Geräte-ID, Gerätegeheimnis | Einmalcode verbrauchen und neues Gerät anlegen |
 | `lock_active_device(p_inventory_id uuid, p_device_id text, p_device_token text)` | Nur service_role; void | Aktiven Aufrufer unter Zeilensperre erneut prüfen |
 | `issue_join_token(p_inventory_id uuid, p_caller_device_id text, p_caller_device_token text)` | Nur service_role; Join-Code und Ablaufzeit | Code ausstellen |
 | `revoke_device(p_inventory_id uuid, p_device_id text, p_caller_device_id text, p_caller_device_token text)` | Nur service_role; void | Gerätezugriff nach erneuter Aufruferprüfung widerrufen |
-| `consume_registration_attempt(p_inventory_id uuid, p_client_key text)` | Nur service_role; boolean | Rate-Limit-Verbrauch buchen und Freigabe zurückgeben |
+| `revoke_device_join_tokens()` | Nur Trigger | Offene Join-Codes beim Deaktivieren ihres Ausstellergeräts sperren |
+| `consume_public_attempt(p_client_key text, p_action text)` | Nur service_role; boolean | Clientbezogenes Minutenlimit für `create` bzw. `register` buchen und Freigabe zurückgeben |
 | `set_item_updated_at()` | Nur Trigger | `updated_at` für Produkte, Positionen, Bestelleinträge, Orte, Fächer und Sortierung setzen |
 | `audit_change()` | Nur Trigger | Inventar-, Produkt-, Bild- und Geräteereignisse schreiben |
 | `audit_stock_change()` | Nur Trigger | Bestandsereignisse schreiben |
@@ -369,8 +398,8 @@ Die Edge-Endpunkte verbinden Browser und privilegierte Funktionen:
 
 | Endpunkt | Zugang | SQL-/Storage-Aufgabe |
 | --- | --- | --- |
-| `createInventory` | Öffentlich | `setup_inventory` |
-| `registerDevice` | Öffentlich, begrenzt | `consume_registration_attempt`, dann `register_device` |
+| `createInventory` | Betreiber-Einladung, clientbezogen begrenzt | `consume_public_attempt`, dann `setup_inventory` |
+| `registerDevice` | Gültiger Geräte-Join-Code, clientbezogen begrenzt | `consume_public_attempt`, dann `register_device` |
 | `createJoinToken` | Aktives Gerät | `issue_join_token` |
 | `revokeDevice` | Aktives Gerät | `revoke_device` |
 | `imageStorage` | Aktives Gerät und passendes Produkt | WebP hochladen, signieren oder löschen |

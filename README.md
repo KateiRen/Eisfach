@@ -270,7 +270,8 @@ Die Edge Functions nutzen `SUPABASE_URL`, `SUPABASE_ANON_KEY` und
 [config.toml](./supabase/config.toml) deaktiviert die JWT-Prüfung am Functions-Gateway,
 weil die App keine Supabase-Auth-Konten verwendet. Geschützte Endpunkte prüfen
 selbst die Geräteberechtigung. `createInventory` und `registerDevice` sind
-öffentliche Einstiegspunkte.
+öffentlich erreichbare Einstiegspunkte mit clientbezogenen Minutenlimits.
+`createInventory` benötigt zusätzlich eine einmalige Betreiber-Einladung.
 
 Das Repository führt ausschließlich das vollständige aktuelle Schema.
 **Nicht erneut über eine bestehende Datenbank ausführen:** Es ist kein
@@ -302,6 +303,19 @@ ausführen, bevor die zugehörige Oberfläche veröffentlicht wird. Es ergänzt 
 atomare, versionsgeprüfte `receive_order`-Funktion. Frische Datenbanken benötigen
 weiterhin nur das aktuelle vollständige Schema.
 
+Für die Absicherung der Inventaranlage anschließend
+[update_security_invitations.sql](./supabase/update_security_invitations.sql)
+**einmalig** nach Sicherung und bei pausierter Inventar-/Geräteregistrierung
+ausführen. Danach die Edge Functions **createInventory und registerDevice**
+mit der aktualisierten gemeinsamen HTTP-Datei und zuletzt die Oberfläche
+veröffentlichen. Das SQL entfernt ausdrücklich die alte, ungeschützte
+`setup_inventory`-Signatur. Bis zur Veröffentlichung der neuen Functions kann
+die Registrierung vorübergehend fehlschlagen; es gibt keinen ungeschützten Fallback.
+Bestehende Inventare und Geräte bleiben erhalten. Alle zuvor ausgestellten
+Join-Codes werden ungültig, da deren ausstellendes Gerät noch nicht erfasst war.
+Neue Join-Codes werden dem Aussteller zugeordnet und beim Deaktivieren/Löschen
+dieses Geräts gesperrt. Bereits eingeladene Geräte behalten ihren Zugriff.
+
 ### 2. Oberfläche bereitstellen
 
 Für GitHub Pages unter **Settings → Pages → Build and deployment**:
@@ -315,9 +329,35 @@ Repository-Unterpfad; ein Build, SPA-Rewrite oder eigener Anwendungsserver ist
 nicht erforderlich. SQL- und Edge-Quelldateien enthalten keine benötigten
 privaten Konfigurationswerte.
 
+**Origin-Isolation:** Repository-Unterpfade derselben GitHub-Pages-Domain
+teilen sich `localStorage`. Andere Anwendungen unter derselben Origin dürfen
+daher nicht als voneinander isoliert betrachtet werden. Für den produktiven
+Betrieb eine ausschließlich für Eisfach verwendete Domain/Subdomain einrichten,
+HTTPS erzwingen und keine unkontrollierten anderen Anwendungen dort hosten.
+Eine andere Schlüsselbenennung oder JavaScript-Weiterleitung löst dies nicht.
+Solange keine eigene Origin eingerichtet ist, bleibt dieses Risiko bestehen.
+
+Vor einem Domainwechsel Daten sichern, die alte Adresse zunächst erreichbar lassen
+und auf einem weiterhin berechtigten alten Gerät einen frischen Join-Code erzeugen.
+Die neue Adresse auf einem zweiten Browser/Gerät mit Inventar-ID und Join-Code
+verbinden und testen, bevor die alte Adresse umgeleitet oder abgeschaltet wird.
+Lokale Verbindungen, Offline-Kopien und PWA-Installationen ziehen nicht automatisch
+mit um. Gerätegeheimnisse nicht in URLs, DNS oder das Repository kopieren.
+
 ### 3. Inventar und Geräte verbinden
 
-Auf dem ersten Gerät **Inventar und erstes Gerät anlegen** verwenden.
+Der Betreiber erzeugt für jedes neue Inventar im Supabase SQL Editor
+als `postgres` eine einmalige Einladung:
+
+```sql
+select * from public.issue_inventory_invitation();
+```
+
+Den zurückgegebenen `invitation_token` vertraulich weitergeben, nicht ins
+Repository oder in URLs übernehmen. Er gilt **24 Stunden für genau ein Inventar**.
+Ungenutzte Einladungen lassen sich im SQL Editor durch Löschen der betreffenden
+Zeile aus `inventory_invitations` widerrufen. Auf dem ersten Gerät diese
+**Betreiber-Einladung** eingeben und **Inventar und erstes Gerät anlegen** verwenden.
 Weitere Geräte über den einmaligen Join-Code eines aktiven Geräts registrieren.
 Die [Schritt-für-Schritt-Anleitung](./docs/einrichtung.md) erklärt beide Abläufe,
 ihre Grenzen und das sichere Trennen von Geräten.
@@ -403,10 +443,18 @@ Keine fremden Skripte einbinden und HTTPS nutzen. Deaktivieren beendet den
 Onlinezugriff, löscht aber keine bereits heruntergeladenen Daten auf dem Gerät.
 Bereits signierte Bildlinks bleiben bis zu ihrem Ablauf verwendbar.
 
-Die öffentliche Inventaranlage benötigt für breiten Betrieb zusätzlichen
-Missbrauchsschutz, Quotas, Monitoring und Backups. CORS ist kein Missbrauchsschutz.
-Registrierungsversuche sind auf 30 je Client und 60 je Inventar pro Minute begrenzt;
+Die öffentlich erreichbare Inventaranlage benötigt eine
+Betreiber-Einladung; ohne gültige, unverbrauchte Einladung wird kein Inventar
+angelegt. Anlageversuche sind auf 5, Geräteregistrierungsversuche auf 30 je
+Client und Minute begrenzt. Es gibt bewusst kein von Fremden ausschöpfbares
+Inventarlimit. Clients hinter derselben öffentlichen IP teilen sich das Limit;
 die Zuordnung setzt vertrauenswürdige Gateway-Forwarding-Header voraus.
+Zusätzliche vorgelagerte DDoS-/Bot-Abwehr, Ressourcenquotas, Kostenwarnungen,
+Monitoring und Backups bleiben Betreiberaufgaben. Die Einladungen begrenzen
+Neuanlagen, nicht die Datenmenge oder Aktivität bereits berechtigter Inventare.
+Vor der Absicherung öffentlich angelegte Inventare werden nicht automatisch
+gelöscht oder gesperrt und sollten administrativ geprüft werden.
+CORS ist kein Missbrauchsschutz.
 Produkte und Bilduploads bilden keine gemeinsame Transaktion. Bei Teilfehlern
 bereits gespeicherte Daten bzw. Bilder vor erneutem manuellen Upload prüfen.
 
@@ -419,7 +467,8 @@ python -m http.server 8000
 ```
 
 `http://localhost:8000` statt direkt einer Datei öffnen. Es ist kein `npm install`
-oder Build erforderlich. Die Node-Tests benötigen ein aktuelles Node.js:
+oder Build erforderlich. Die Node-Tests benötigen Node.js ab 22.18, damit auch
+die TypeScript-Edge-Functions ohne zusätzlichen Transpiler ausgeführt werden:
 
 ```powershell
 node --test tests
@@ -437,6 +486,7 @@ psql "$env:TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase\tests\inventory_sor
 psql "$env:TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase\tests\item_metadata.sql
 psql "$env:TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase\tests\product_orders.sql
 psql "$env:TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase\tests\order_receiving.sql
+psql "$env:TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase\tests\security_invitations.sql
 ```
 
 Die SQL-Tests verwerfen ihre Testdaten per `ROLLBACK`. Für eine Freigabe zusätzlich

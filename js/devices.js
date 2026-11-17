@@ -26,13 +26,13 @@ async function refresh() {
       await refresh();
     }));
     if (!device.revoked) buttons.append(action('Deaktivieren', async () => {
-      if (!confirm(`${device.device_name} deaktivieren?${current ? ' Du verlierst den Zugriff auf dieses Inventar.' : ''}`)) return;
+      if (!confirm(`${device.device_name} deaktivieren? Offene Join-Codes dieses Geräts werden gesperrt. Bereits eingeladene Geräte behalten Zugriff.${current ? ' Du verlierst den Zugriff auf dieses Inventar.' : ''}`)) return;
       await edge('revokeDevice', { deviceId: device.device_id });
       if (current) disconnect();
       else await refresh();
     }, 'danger'));
     buttons.append(action('Löschen', async () => {
-      if (!confirm(`${device.device_name} endgültig löschen?${current ? ' Du verlierst den Zugriff auf dieses Inventar.' : ''}`)) return;
+      if (!confirm(`${device.device_name} endgültig löschen? Offene Join-Codes dieses Geräts werden ungültig. Bereits eingeladene Geräte behalten Zugriff.${current ? ' Du verlierst den Zugriff auf dieses Inventar.' : ''}`)) return;
       await rest('device_registrations', `?id=eq.${device.id}`, { method: 'DELETE' });
       if (current) disconnect();
       else await refresh();

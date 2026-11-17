@@ -22,7 +22,10 @@
     </nav>
     <section id="create" class="card">
       <h2>1. Inventar einrichten</h2>
+      <p>Für ein neues Inventar benötigst du eine einmalige Betreiber-Einladung. Für ein bestehendes Inventar stattdessen unten <a href="#join">Inventar verbinden</a> verwenden.</p>
       <form id="create-form">
+        <label>Betreiber-Einladung<input name="invitationToken" type="password" required minlength="64" maxlength="64" pattern="[0-9a-fA-F]{64}" autocomplete="off" spellcheck="false" autocapitalize="off" aria-describedby="invitation-help"></label>
+        <p id="invitation-help">64 Zeichen, einmal verwendbar und 24 Stunden gültig. Wird nicht als Geräteverbindung gespeichert.</p>
         <label>Inventarname<input name="name" required maxlength="100" placeholder="Unser Eisfach"></label>
         <label>Beschreibung<textarea name="description" maxlength="1000"></textarea></label>
         <label>Name dieses Geräts<input name="deviceName" required maxlength="100" placeholder="Küchen-Tablet" autocomplete="off"></label>

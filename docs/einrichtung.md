@@ -22,6 +22,7 @@ Pro Browserprofil speichert die App genau eine aktive Inventarverbindung.
 
    | Eingabe | Bedeutung | Grenze im Formular |
    | --- | --- | --- |
+   | Betreiber-Einladung | Vom Betreiber ausgestellter Einmalcode für ein neues Inventar | Pflicht, 64 Hex-Zeichen |
    | Inventarname | Gemeinsamer Name, z. B. „Unser Eisfach“ | Pflicht, 100 Zeichen |
    | Beschreibung | Optionale Beschreibung des Inventars | 1000 Zeichen |
    | Name dieses Geräts | Wiedererkennbarer Name, z. B. „Küchen-Tablet“ | Pflicht, 100 Zeichen |
@@ -35,6 +36,13 @@ Pro Browserprofil speichert die App genau eine aktive Inventarverbindung.
    Ort, optionales Fach und Stückzahl erfassen.
 
 Das erste Gerät ist sofort voll berechtigt und benötigt keinen Join-Code.
+Die Betreiber-Einladung gilt 24 Stunden für genau eine Inventaranlage und wird
+zusammen mit Inventar und erstem Gerät atomar verbraucht. Fehlende, abgelaufene,
+widerrufene oder bereits verwendete Einladungen erlauben keine Anlage.
+Der Betreiber erzeugt Einladungen im SQL Editor mit
+`select * from public.issue_inventory_invitation();`; siehe
+[technische Einrichtung](../README.md#3-inventar-und-geräte-verbinden).
+Der Browser speichert den Einladungscode nicht als Teil der Geräteverbindung.
 Die Datenbank erlaubt teilweise größere Textlängen als das Formular;
 die exakten Feldgrenzen stehen in der [Datenbankreferenz](./datenbank.md).
 
@@ -56,7 +64,8 @@ Geräte → Dieses Gerät lokal trennen** die lokale Verbindung entfernen.
 Der Code ist **15 Minuten gültig und einmal verwendbar**. Nach erfolgreicher
 Registrierung oder Ablauf ist für das nächste Gerät ein neuer Code nötig.
 **Code ausblenden** versteckt nur die lokale Anzeige; es widerruft den Code
-nicht serverseitig vor Ablauf.
+nicht serverseitig vor Ablauf. Deaktivieren oder Löschen des ausstellenden
+Geräts macht dessen noch offene Join-Codes ungültig.
 
 ### Auf dem neuen Gerät
 
@@ -93,6 +102,8 @@ Join-Code wird nicht als dauerhafte Verbindung gespeichert.
 - **QR-Scan nicht möglich:** HTTPS, Kamerafreigabe und Kamera prüfen oder Daten
   manuell eingeben. Ein QR-Code allein ersetzt nicht den Klick auf **Gerät verbinden**.
 - **Zu viele Versuche:** Kurz warten; es gelten serverseitige Minutenlimits.
+  Inventaranlage: 5 Versuche je Client und Minute; Geräteverbindung: 30.
+  Geräte hinter derselben öffentlichen IP teilen sich das jeweilige Limit.
 - **Keine dauerhafte Verbindung:** Speicherung im Browser erlauben. Privater
   Modus oder das Löschen von Website-Daten kann die Verbindung entfernen.
 - **Antwort beim Anlegen/Verbinden verloren:** Nicht von einem vollständigen
@@ -109,13 +120,16 @@ Registrierungszeitpunkt, letzte gemeldete Aktivität und Status.
 | Aktion | Wirkung |
 | --- | --- |
 | Umbenennen | Ändert den Gerätenamen; aktuell maximal 100 Zeichen im Dialog |
-| Deaktivieren | Widerruft den Onlinezugriff; Registrierung bleibt als deaktiviert sichtbar |
-| Löschen | Entfernt die Registrierung dauerhaft |
+| Deaktivieren | Widerruft den Onlinezugriff und offene Join-Codes dieses Geräts; Registrierung bleibt als deaktiviert sichtbar |
+| Löschen | Entfernt die Registrierung und ihre Join-Codes dauerhaft |
 | Dieses Gerät lokal trennen | Entfernt Verbindung und Offline-Kopie nur in diesem Browser; Registrierung bleibt aktiv |
 
 Deaktivierung und Löschung des eigenen Geräts führen zurück zur Einrichtung.
 Zum erneuten Verbinden ist ein neuer Join-Code erforderlich. Es gibt keinen
 Button zum Reaktivieren einer deaktivierten Registrierung.
+Bereits mit dessen Join-Codes verbundene Geräte bleiben ausdrücklich berechtigt.
+Bei einem gestohlenen Gerätegeheimnis deshalb alle unbekannten Geräte separat
+deaktivieren; der Widerruf eines Geräts ist kein inventarweiter Sicherheitsreset.
 
 **Das letzte aktive Gerät nicht ohne Ersatz deaktivieren, löschen oder lokal
 trennen.** Inventar-ID und Produkt-QR-Code erlauben keine Wiederherstellung.
@@ -139,3 +153,13 @@ JSON-/ZIP-Sicherungen enthalten sie absichtlich nicht.
 Ein widerrufenes Gerät kann keine neuen Daten mehr online laden.
 Bereits lokal vorhandene Daten lassen sich nicht aus der Ferne löschen;
 signierte Bildlinks bleiben bis zu ihrem Ablauf nach maximal 120 Sekunden nutzbar.
+
+## 5. Eigene Domain und Domainwechsel
+
+Unterordner derselben Website teilen sich den Browserspeicher. Eine weitere
+Anwendung unter derselben GitHub-Pages-Domain kann daher bei dort ausgeführtem
+JavaScript auch Eisfach-Verbindung und Offline-Kopie erreichen. Nur eine eigene,
+ausschließlich für Eisfach genutzte Origin isoliert diese Anwendungen.
+Die Domain ist eine Hosting-Einstellung und kann nicht durch die App selbst
+isoliert werden. Zum sicheren Wechsel und erneuten Koppeln siehe
+[Oberfläche bereitstellen](../README.md#2-oberfläche-bereitstellen).

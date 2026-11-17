@@ -24,7 +24,13 @@ export function initSetup() {
         saveConnection(await edge(endpoint, values, false));
         location.replace('./app.html');
       } catch (error) {
-        status.textContent = error.message;
+        if (endpoint === 'createInventory' && error.status === 403) {
+          status.textContent = 'Die Betreiber-Einladung ist ungültig, abgelaufen oder bereits verwendet.';
+        } else if (error.status === 429) {
+          status.textContent = 'Zu viele Versuche. Bitte in einer Minute erneut versuchen.';
+        } else {
+          status.textContent = error.message;
+        }
       } finally {
         button.disabled = false;
       }

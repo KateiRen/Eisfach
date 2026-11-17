@@ -6,8 +6,11 @@ const corsHeaders = {
 };
 
 export class HttpError extends Error {
-  constructor(public status: number, message: string) {
+  status: number;
+
+  constructor(status: number, message: string) {
     super(message);
+    this.status = status;
   }
 }
 
@@ -198,9 +201,9 @@ export function credentials(row: Credentials) {
   };
 }
 
-export async function registrationRateLimit(
+export async function publicRateLimit(
   request: Request,
-  inventoryId: string,
+  action: "create" | "register",
 ): Promise<void> {
   // Supabase's gateway supplies forwarding headers. Other hosting must overwrite them.
   const address = request.headers.get("x-forwarded-for")?.split(",")[0].trim() ||
@@ -209,9 +212,9 @@ export async function registrationRateLimit(
   const clientKey = Array.from(new Uint8Array(digest), (byte) =>
     byte.toString(16).padStart(2, "0")
   ).join("");
-  const allowed = await rpc<boolean>("consume_registration_attempt", {
-    p_inventory_id: inventoryId,
+  const allowed = await rpc<boolean>("consume_public_attempt", {
+    p_action: action,
     p_client_key: clientKey,
   });
-  if (!allowed) throw new HttpError(429, "Too many registration attempts; try again later");
+  if (!allowed) throw new HttpError(429, "Too many attempts; try again later");
 }
