@@ -346,11 +346,21 @@ ihre Grenzen und das sichere Trennen von Geräten.
   installiert werden. Kamera und Service Worker benötigen HTTPS oder localhost.
 
 Bei Releases die Cache-Version in [service-worker.js](./service-worker.js) erhöhen.
-Alle App-Tabs schließen und neu öffnen, damit ein wartender Service Worker
-aktiviert wird. Bei veralteter Oberfläche Service Worker und App-Cache gezielt
+Im Browser und in der installierten PWA erscheint bei einer bereitstehenden Version
+**Update verfügbar** mit **Jetzt aktualisieren**. Die App prüft beim Öffnen,
+bei der Rückkehr in den Vordergrund und nach Wiederherstellung der Verbindung.
+Zuerst offene Änderungen speichern: Nach Bestätigung wird der wartende Service
+Worker aktiviert und das aktuelle Fenster neu geladen. Andere offene Fenster
+zeigen ebenfalls den Hinweis, laden aber nicht ungefragt neu.
+Ohne Klick wird die neue Version spätestens nach dem Schließen aller App-Fenster
+und Eisfach-Tabs beim nächsten Öffnen verwendet. Die Geräteverbindung bleibt erhalten.
+Beim erstmaligen Wechsel von einer älteren Version ohne Update-Hinweis müssen
+noch einmal alle Eisfach-Fenster und Tabs geschlossen und neu geöffnet werden,
+nachdem der Browser das Update heruntergeladen hat.
+Bei veralteter Oberfläche Service Worker und App-Cache gezielt
 über die Entwicklerwerkzeuge entfernen, **nicht unbedacht den gesamten
 Website-Speicher löschen**: Darin liegt die Geräteverbindung.
-Eine atomare Aktualisierung aller offenen Tabs ist derzeit nicht implementiert.
+Eine atomare Aktualisierung aller offenen Tabs ist weiterhin nicht implementiert.
 
 ## Architektur und Projektstruktur
 

@@ -1,7 +1,7 @@
-const CACHE = 'eisfach-shell-v37';
+const CACHE = 'eisfach-shell-v38';
 const SHELL = [
   './', './index.html', './setup.html', './app.html', './devices.html', './freezer.html', './sorting.html', './bulk-edit.html', './appearance.html', './transfer.html',
-  './orders.html', './js/orders.js', './js/product-editor.js',
+  './orders.html', './js/orders.js', './js/product-editor.js', './js/updates.js',
   './css/app.css', './js/config.js', './js/supabase.js', './js/auth.js',
   './js/storage.js', './js/product.js', './js/zip.js', './js/setup.js', './js/scanner.js', './js/inventory.js',
   './js/devices.js', './js/freezer.js', './js/locations.js', './js/ordering.js', './js/sorting.js', './js/bulk-edit.js', './js/appearance.js', './js/transfer.js', './js/app.js', './manifest.json', './assets/icon.svg',
@@ -10,7 +10,13 @@ const SHELL = [
 const shellURLs = new Set(SHELL.map((path) => new URL(path, self.registration.scope).href));
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(
+    SHELL.map((path) => new Request(new URL(path, self.registration.scope), { cache: 'reload' })),
+  )));
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') event.waitUntil(self.skipWaiting());
 });
 
 self.addEventListener('activate', (event) => {

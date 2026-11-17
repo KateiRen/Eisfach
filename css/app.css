@@ -126,6 +126,8 @@ body[data-page="bulk-edit"] main { max-width: none; }
 .quantity-control input { min-width: 0; margin: 0; }
 .quantity-control button { flex-shrink: 0; min-width: 44px; }
 .notice, #status:not(:empty), #editor-status:not(:empty), #stock-status:not(:empty), #stock-action-status:not(:empty) { padding: .8rem; background: #fff1d2; border-radius: .5rem; }
+.update-notice { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+.update-notice p { flex: 1 1 16rem; margin: 0; }
 dialog { max-width: min(94vw, 600px); width: 100%; max-height: 90dvh; border: 1px solid #8aafb2; border-radius: 1rem; padding: 1.25rem; }
 #stock-dialog { max-width: min(94vw, 800px); }
 dialog::backdrop { background: #102f38a8; }

@@ -1,6 +1,7 @@
 import { loadConnection, clearConnection } from './auth.js';
 import { checkConnection, rest, rpc } from './supabase.js';
 import { loadAppearance, applyAppearance, initAppearance } from './appearance.js';
+import { initUpdates } from './updates.js';
 
 export function status(message) {
   document.querySelector('#status').textContent = message;
@@ -79,9 +80,7 @@ function initNavigation(page) {
 
 async function init() {
   try { applyAppearance(loadAppearance()); } catch (error) { status(error.message); }
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js').catch(() => {});
-  }
+  initUpdates(status).catch((error) => status(`App-Updates konnten nicht eingerichtet werden: ${error.message}`));
   window.addEventListener('offline', () => status('Offline: Die zuletzt geladene Liste ist lesbar. Änderungen benötigen Internet.'));
   window.addEventListener('online', () => status('Wieder online. Bitte neu laden, um die Daten zu aktualisieren.'));
   const page = document.body.dataset.page;
