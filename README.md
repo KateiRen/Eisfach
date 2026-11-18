@@ -102,6 +102,7 @@ zählt Produkte, nicht Positionen.
 
 Jede Karte zeigt erstes Produktbild, Name, vorhandene Zeiten, Gewicht pro Packung und Ort/Fach.
 Ein Klick auf das Vorschaubild öffnet eine vergrößerte Bildansicht.
+Auf dem Desktop wird das Bild proportional auf den verfügbaren Bildschirmplatz vergrößert.
 Erneutes Klicken oder Escape schließt sie wieder; dies gilt auch für das Bild im Positionsdialog.
 Ein Klick auf den Namen öffnet den Positionsdialog mit:
 
