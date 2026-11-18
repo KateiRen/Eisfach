@@ -101,6 +101,8 @@ Produkts sind erlaubt, auch am gleichen Ort. Die Anzahl in der Kategorieübersch
 zählt Produkte, nicht Positionen.
 
 Jede Karte zeigt erstes Produktbild, Name, vorhandene Zeiten, Gewicht pro Packung und Ort/Fach.
+Ein Klick auf das Vorschaubild öffnet eine vergrößerte Bildansicht.
+Erneutes Klicken oder Escape schließt sie wieder; dies gilt auch für das Bild im Positionsdialog.
 Ein Klick auf den Namen öffnet den Positionsdialog mit:
 
 - Produktname als Überschrift, Produktnummer als kleinem Untertitel;

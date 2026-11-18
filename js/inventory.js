@@ -305,7 +305,7 @@ export function scheduleStockPreviews(previews, isCurrent) {
   requestAnimationFrame(() => setTimeout(() => {
     if (!isCurrent()) return;
     if (!('IntersectionObserver' in globalThis)) {
-      for (const { item, preview } of previews) loadStockPreview(item, preview, isCurrent);
+      for (const { item, preview } of previews) loadStockPreview(item, preview, isCurrent, 96, currentView === 'stock');
       return;
     }
     const products = new Map(previews.map(({ item, preview }) => [preview, item]));
@@ -314,7 +314,7 @@ export function scheduleStockPreviews(previews, isCurrent) {
       for (const entry of entries) {
         if (!entry.isIntersecting) continue;
         observer.unobserve(entry.target);
-        loadStockPreview(products.get(entry.target), entry.target, isCurrent);
+        loadStockPreview(products.get(entry.target), entry.target, isCurrent, 96, currentView === 'stock');
       }
     });
     previewObserver = observer;
@@ -354,7 +354,29 @@ async function stockPreviewURL(itemId) {
   }
 }
 
-export async function loadStockPreview(item, preview, isCurrent, size = 96) {
+function showStockImage(url, name) {
+  const viewer = element('dialog', undefined, 'stock-image-viewer');
+  viewer.setAttribute('aria-label', `Bild: ${name}`);
+  const close = element('button', undefined, 'stock-image-close');
+  close.type = 'button';
+  close.setAttribute('aria-label', 'Bildansicht schließen');
+  const img = element('img');
+  img.src = url;
+  img.alt = name;
+  close.append(img);
+  viewer.append(close);
+  viewer.addEventListener('click', () => viewer.close());
+  viewer.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    viewer.close();
+  });
+  viewer.addEventListener('close', () => viewer.remove(), { once: true });
+  document.body.append(viewer);
+  viewer.showModal();
+}
+
+export async function loadStockPreview(item, preview, isCurrent, size = 96, zoomable = false) {
   if (!isCurrent()) return;
   preview.textContent = offline ? 'Bild nur online verfügbar' : 'Bild wird geladen …';
   if (offline) return;
@@ -373,7 +395,16 @@ export async function loadStockPreview(item, preview, isCurrent, size = 96) {
     img.addEventListener('error', () => {
       if (isCurrent()) preview.textContent = 'Bild konnte nicht geladen werden.';
     });
-    preview.replaceChildren(img);
+    if (zoomable) {
+      const zoom = element('button', undefined, 'stock-image-zoom');
+      zoom.type = 'button';
+      zoom.setAttribute('aria-label', `Bild vergrößern: ${item.name}`);
+      zoom.addEventListener('click', () => showStockImage(url, item.name));
+      zoom.append(img);
+      preview.replaceChildren(zoom);
+    } else {
+      preview.replaceChildren(img);
+    }
   } catch (error) {
     if (isCurrent()) preview.textContent = `Bild nicht verfügbar: ${error.message}`;
   }
@@ -456,7 +487,7 @@ function updateStockProduct() {
     const preview = document.querySelector('#stock-detail-image');
     preview.replaceChildren();
     if (product && stockDialog().open) {
-      loadStockPreview(product, preview, () => version === stockImageVersion && stockDialog().open, 192);
+      loadStockPreview(product, preview, () => version === stockImageVersion && stockDialog().open, 192, true);
     }
   }
   document.querySelector('#stock-product-weight').textContent = `Gewicht pro Packung: ${productWeightLabel(product)}`;

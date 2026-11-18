@@ -69,6 +69,11 @@ input[type="color"] { width: 100%; max-width: 12rem; height: 3rem; padding: .25r
 .stock-name:hover { text-decoration: underline; }
 .stock-detail-image { width: min(100%, 192px); min-height: 192px; color: #49666c; }
 .stock-detail-image img { display: block; width: 100%; height: 192px; object-fit: contain; border-radius: .6rem; }
+.stock-image-zoom, .stock-image-close { display: block; width: 100%; padding: 0; border: 0; background: none; }
+.stock-image-zoom { cursor: zoom-in; }
+dialog.stock-image-viewer { width: fit-content; max-width: 94vw; padding: .5rem; }
+.stock-image-close { cursor: zoom-out; }
+.stock-image-close img { display: block; width: auto; height: auto; max-width: calc(94vw - 1rem - 2px); max-height: calc(90dvh - 1rem - 2px); object-fit: contain; }
 #stock-subtitle { font-size: .875rem; }
 .stock-description { white-space: pre-wrap; overflow-wrap: anywhere; }
 .stock-quantity-actions { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; margin-bottom: 1rem; }

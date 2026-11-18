@@ -374,10 +374,17 @@ test('Bestandsvorschau zeigt nur das erste Bild, teilt Anfragen und meldet Ladef
   const node = () => ({
     children: [], textContent: '',
     replaceChildren(...children) { this.children = children; },
-    addEventListener() {},
+    listeners: {},
+    attributes: {},
+    append(...children) { this.children.push(...children); },
+    setAttribute(name, value) { this.attributes[name] = value; },
+    addEventListener(type, handler) { this.listeners[type] = handler; },
+    showModal() { this.open = true; },
+    close() { this.open = false; this.listeners.close?.(); },
+    remove() { this.removed = true; },
   });
 
-  globalThis.document = { querySelector: () => null, createElement: node };
+  globalThis.document = { querySelector: () => null, createElement: node, body: node() };
   t.after(() => { globalThis.document = previousDocument; clearConnection(); });
   let metadataCalls = 0;
   const signedPaths = [];
@@ -410,6 +417,29 @@ test('Bestandsvorschau zeigt nur das erste Bild, teilt Anfragen und meldet Ladef
   assert.equal(second.children.length, 1);
   assert.deepEqual(signedPaths, ['first.webp']);
   assert.equal(metadataCalls, 2);
+  const clickable = node();
+  await loadStockPreview({ id: 'fish', name: 'Fisch' }, clickable, () => true, 96, true);
+  const zoom = clickable.children[0];
+  assert.equal(zoom.type, 'button');
+  assert.equal(zoom.attributes['aria-label'], 'Bild vergrößern: Fisch');
+  assert.equal(zoom.children[0].src, first.children[0].src);
+  zoom.listeners.click();
+  const viewer = document.body.children.at(-1);
+  assert.equal(viewer.open, true);
+  assert.equal(viewer.children[0].children[0].src, first.children[0].src);
+  viewer.listeners.click();
+  assert.equal(viewer.open, false);
+  assert.equal(viewer.removed, true);
+  zoom.listeners.click();
+  const reopened = document.body.children.at(-1);
+  assert.equal(reopened.open, true);
+  let prevented = false;
+  reopened.listeners.keydown({ key: 'Enter', preventDefault() { prevented = true; } });
+  assert.equal(reopened.open, true);
+  reopened.listeners.keydown({ key: 'Escape', preventDefault() { prevented = true; } });
+  assert.equal(prevented, true);
+  assert.equal(reopened.open, false);
+  assert.equal(reopened.removed, true);
   const missing = node();
   await loadStockPreview({ id: 'missing' }, missing, () => true);
   assert.equal(missing.textContent, 'Kein Bild');
